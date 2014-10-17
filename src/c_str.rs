@@ -71,19 +71,21 @@ fn main() {
 
 */
 
+#![no_implicit_prelude]
+
 use alloc::libc_heap::malloc_raw;
-use collections::string::String;
-use collections::hash;
-use core::fmt;
-use core::kinds::marker;
-use core::mem;
-use core::prelude::{Clone, Collection, Drop, Eq, ImmutableSlice, Iterator};
-use core::prelude::{MutableSlice, None, Option, Ordering, PartialEq};
-use core::prelude::{PartialOrd, RawPtr, Some, StrSlice, range};
-use core::ptr;
-use core::raw::Slice;
-use core::slice;
-use core::str;
+use std::string::String;
+use std::hash;
+use std::fmt;
+use std::kinds::marker;
+use std::mem;
+use std::prelude::{Clone, Collection, Drop, Eq, ImmutableSlice, Iterator};
+use std::prelude::{MutableSlice, None, Option, Ordering, PartialEq};
+use std::prelude::{PartialOrd, RawPtr, Some, StrSlice, range};
+use std::ptr;
+use std::raw::Slice;
+use std::slice;
+use std::str;
 use libc;
 
 /// The representation of a C String.
@@ -493,12 +495,17 @@ pub unsafe fn from_c_multistring(buf: *const libc::c_char,
 
 #[cfg(test)]
 mod tests {
-    use std::prelude::*;
+    use std::iter::Iterator;
+    use std::option::{None,Some};
     use std::ptr;
+    use std::ptr::RawPtr;
+    use std::slice::ImmutableSlice;
+    use std::str::StrSlice;
     use std::task;
     use libc;
 
-    use super::*;
+    use super::{CString,ToCStr};
+    use super::from_c_multistring;
 
     #[test]
     fn test_str_multistring_parsing() {
@@ -687,7 +694,12 @@ mod tests {
 mod bench {
     use test::Bencher;
     use libc;
-    use std::prelude::*;
+    use std::collections::Collection;
+    use std::iter::range;
+    use std::ptr::RawPtr;
+    use std::str::StrSlice;
+
+    use super::ToCStr;
 
     #[inline]
     fn check(s: &str, c_str: *const libc::c_char) {
