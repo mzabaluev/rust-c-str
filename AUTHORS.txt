@@ -8,6 +8,7 @@ Huon Wilson <dbau.pp+github@gmail.com>
 Jonas Hietala <tradet.h@gmail.com>
 Joseph Crail <jbcrail@gmail.com>
 Julian Orth <ju.orth@gmail.com>
+Mikhail Zabaluev <mikhail.zabaluev@gmail.com>
 P1start <rewi-github@whanau.org>
 Patrick Walton <pcwalton@mimiga.net>
 Richo Healey <richo@psych0tik.net>
