@@ -81,9 +81,10 @@ use std::fmt;
 use std::kinds::Send;
 use std::kinds::marker;
 use std::mem;
-use std::prelude::{Collection, Drop, Eq, ImmutableSlice, Iterator};
-use std::prelude::{MutableSlice, None, Option, Ordering, PartialEq};
-use std::prelude::{PartialOrd, RawPtr, Some, StrSlice, range};
+use std::prelude::{Collection, Drop, Eq, ImmutablePartialEqSlice};
+use std::prelude::{ImmutableSlice, Iterator};
+use std::prelude::{None, Option, Ordering, PartialEq};
+use std::prelude::{PartialOrd, RawPtr, Some, StrSlice};
 use std::ptr;
 use std::raw::Slice;
 use std::slice;
@@ -394,13 +395,15 @@ impl ToCStr for String {
     }
 }
 
+const NUL: u8 = 0;
+
 // The length of the stack allocated buffer for `vec.with_c_str()`
 const BUF_LEN: uint = 128;
 
 impl<'a> ToCStr for &'a [u8] {
     fn to_c_str(&self) -> CString {
+        assert!(!self.contains(&NUL));
         let cs = unsafe { self.to_c_str_unchecked() };
-        check_for_null(*self, cs.as_mut_ptr());
         cs
     }
 
@@ -428,16 +431,14 @@ impl<'a> ToCStr for &'a [u8] {
 unsafe fn with_c_str<T>(v: &[u8], checked: bool,
                         f: |*const libc::c_char| -> T) -> T {
     let c_str = if v.len() < BUF_LEN {
+        if checked {
+            assert!(!v.contains(&NUL));
+        }
         let mut buf: [u8, .. BUF_LEN] = mem::uninitialized();
         slice::bytes::copy_memory(buf, v);
         buf[v.len()] = 0;
 
-        let buf = buf.as_mut_ptr();
-        if checked {
-            check_for_null(v, buf as *mut libc::c_char);
-        }
-
-        return f(buf as *const libc::c_char)
+        return f(buf.as_ptr() as *const libc::c_char)
     } else if checked {
         v.to_c_str()
     } else {
@@ -445,16 +446,6 @@ unsafe fn with_c_str<T>(v: &[u8], checked: bool,
     };
 
     f(c_str.as_ptr())
-}
-
-#[inline]
-fn check_for_null(v: &[u8], buf: *mut libc::c_char) {
-    for i in range(0, v.len()) {
-        unsafe {
-            let p = buf.offset(i as int);
-            assert!(*p != 0);
-        }
-    }
 }
 
 /// External iterator for a CString's bytes.
