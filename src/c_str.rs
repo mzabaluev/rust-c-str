@@ -98,7 +98,7 @@ use libc;
 /// out of scope.
 pub struct CString {
     buf: *const libc::c_char,
-    dtor: Option<proc():Send>
+    dtor: Option<proc(*const libc::c_char):Send>
 }
 
 impl PartialEq for CString {
@@ -130,10 +130,14 @@ impl<S: hash::Writer> hash::Hash<S> for CString {
     }
 }
 
+fn libc_free(buf: *const libc::c_char) {
+    unsafe { libc::free(buf as *mut libc::c_void); }
+}
+
 impl CString {
 
     unsafe fn new_internal(buf: *const libc::c_char,
-                           maybe_dtor: Option<proc():Send>)
+                           maybe_dtor: Option<proc(*const libc::c_char):Send>)
                           -> CString {
         assert!(!buf.is_null());
         CString { buf: buf, dtor: maybe_dtor }
@@ -157,9 +161,7 @@ impl CString {
     ///
     /// Fails if `buf` is null
     pub unsafe fn new_libc(buf: *const libc::c_char) -> CString {
-        CString::new_with_dtor(buf, proc() {
-                libc::free(buf as *mut libc::c_void)
-            })
+        CString::new_with_dtor(buf, libc_free)
     }
 
     /// Create a CString from a foreign pointer and a function to run
@@ -168,7 +170,8 @@ impl CString {
     ///# Failure
     ///
     /// Fails if `buf` is null
-    pub unsafe fn new_with_dtor(buf: *const libc::c_char, dtor: proc():Send)
+    pub unsafe fn new_with_dtor(buf: *const libc::c_char,
+                                dtor: proc(*const libc::c_char):Send)
                                -> CString {
         CString::new_internal(buf, Some(dtor))
     }
@@ -280,7 +283,7 @@ impl Drop for CString {
     fn drop(&mut self) {
         match self.dtor.take() {
             None => (),
-            Some(f) => f()
+            Some(f) => f(self.buf)
         }
     }
 }
