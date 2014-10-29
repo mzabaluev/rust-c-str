@@ -11,7 +11,6 @@
 
 #![feature(default_type_params)]
 
-extern crate alloc;
 extern crate libc;
 
 #[cfg(test)]

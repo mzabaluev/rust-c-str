@@ -68,7 +68,6 @@ fn main() {
 
 #![no_implicit_prelude]
 
-use alloc::libc_heap::malloc_raw;
 use std::string::String;
 use std::hash;
 use std::fmt;
@@ -122,6 +121,14 @@ impl<S: hash::Writer> hash::Hash<S> for CString {
     fn hash(&self, state: &mut S) {
         self.as_bytes().hash(state)
     }
+}
+
+fn libc_malloc(size: uint) -> *mut libc::c_char {
+    let buf = unsafe {
+            libc::malloc(size as libc::size_t) as *mut libc::c_char
+        };
+    if buf.is_null() { fail!("out of memory") }
+    buf
 }
 
 fn libc_free(buf: *const libc::c_char) {
@@ -406,7 +413,7 @@ impl<'a> ToCStr for &'a [u8] {
 
     unsafe fn to_c_str_unchecked(&self) -> CString {
         let self_len = self.len();
-        let buf = malloc_raw(self_len + 1) as *mut libc::c_char;
+        let buf = libc_malloc(self_len + 1);
 
         ptr::copy_nonoverlapping_memory(buf,
                 self.as_ptr() as *const libc::c_char, self_len);
