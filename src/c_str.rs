@@ -76,7 +76,7 @@ use std::kinds::marker;
 use std::mem;
 use std::prelude::{Collection, Drop, Eq, ImmutablePartialEqSlice};
 use std::prelude::{ImmutableSlice, Iterator};
-use std::prelude::{None, Option, Ordering, PartialEq};
+use std::prelude::{None, Option, Ord, Ordering, PartialEq};
 use std::prelude::{PartialOrd, RawPtr, Some, StrSlice};
 use std::ptr;
 use std::raw::Slice;
@@ -117,9 +117,16 @@ impl PartialEq for CStrBuf {
 }
 
 impl PartialOrd for CStrBuf {
+    #[inline]
     fn partial_cmp(&self, other: &CStrBuf) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for CStrBuf {
+    fn cmp(&self, other: &CStrBuf) -> Ordering {
         let res = unsafe { libc::strcmp(self.ptr, other.ptr) as int };
-        res.partial_cmp(&0)
+        res.cmp(&0)
     }
 }
 
@@ -136,6 +143,13 @@ impl PartialOrd for CString {
     #[inline]
     fn partial_cmp(&self, other: &CString) -> Option<Ordering> {
         self.as_bytes().partial_cmp(&other.as_bytes())
+    }
+}
+
+impl Ord for CString {
+    #[inline]
+    fn cmp(&self, other: &CString) -> Ordering {
+        self.as_bytes().cmp(&other.as_bytes())
     }
 }
 
