@@ -641,6 +641,7 @@ mod tests {
 
     use super::{CStrBuf,CString,ToCStr};
     use super::from_c_multistring;
+    use super::libc_malloc;
 
     #[test]
     fn test_str_multistring_parsing() {
@@ -797,6 +798,18 @@ mod tests {
     #[should_fail]
     fn test_str_new_fail() {
         let _c_str = unsafe { CString::new_unowned(ptr::null(), 1) };
+    }
+
+    #[test]
+    fn test_into_c_str() {
+        let buf = unsafe {
+            let p = libc_malloc(6);
+            ptr::copy_nonoverlapping_memory(
+                    p, b"hello\0".as_ptr() as *const libc::c_char, 6);
+            CStrBuf::new_libc(p as *const libc::c_char)
+        };
+        let c_str = buf.into_c_str();
+        assert_eq!(c_str.as_bytes(), b"hello\0");
     }
 }
 
