@@ -110,6 +110,21 @@ pub struct CString {
     len: uint
 }
 
+impl PartialEq for CStrBuf {
+    fn eq(&self, other: &CStrBuf) -> bool {
+        unsafe { libc::strcmp(self.ptr, other.ptr) == 0 }
+    }
+}
+
+impl PartialOrd for CStrBuf {
+    fn partial_cmp(&self, other: &CStrBuf) -> Option<Ordering> {
+        let res = unsafe { libc::strcmp(self.ptr, other.ptr) as int };
+        res.partial_cmp(&0)
+    }
+}
+
+impl Eq for CStrBuf {}
+
 impl PartialEq for CString {
     #[inline]
     fn eq(&self, other: &CString) -> bool {
