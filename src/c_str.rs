@@ -84,26 +84,36 @@ use std::slice;
 use std::str;
 use libc;
 
-/// The representation of a C String.
+const NUL: u8 = 0;
+
+/// A low-level representation of a C String.
 ///
 /// This structure wraps a raw pointer to a NUL-terminated C string,
 /// and will optionally invoke a destructor closure when it goes
 /// out of scope.
-pub struct CString {
-    buf: *const libc::c_char,
+///
+/// For performance reasons, `CStrBuf` does not provide operations that
+/// require calculation of the string's length. To get those, promote a
+/// `CStrBuf` into `CString` using the method `.into_c_str()`.
+pub struct CStrBuf {
+    ptr: *const libc::c_char,
     dtor: Option<proc(*const libc::c_char):Send>
 }
 
+/// A length-aware representation of a C string.
+///
+/// This structure builds upon `CStrBuf` to add the computed string length.
+/// References to `CString` values can be converted to byte or string slices
+/// at constant cost.
+pub struct CString {
+    buf: CStrBuf,
+    len: uint
+}
+
 impl PartialEq for CString {
+    #[inline]
     fn eq(&self, other: &CString) -> bool {
-        // Check if the two strings share the same buffer
-        if self.buf as uint == other.buf as uint {
-            true
-        } else {
-            unsafe {
-                libc::strcmp(self.buf, other.buf) == 0
-            }
-        }
+        self.as_bytes().eq(&other.as_bytes())
     }
 }
 
@@ -135,46 +145,143 @@ fn libc_free(buf: *const libc::c_char) {
     unsafe { libc::free(buf as *mut libc::c_void); }
 }
 
-impl CString {
+impl CStrBuf {
 
-    unsafe fn new_internal(buf: *const libc::c_char,
+    unsafe fn new_internal(ptr: *const libc::c_char,
                            maybe_dtor: Option<proc(*const libc::c_char):Send>)
-                          -> CString {
-        assert!(!buf.is_null());
-        CString { buf: buf, dtor: maybe_dtor }
+                          -> CStrBuf {
+        assert!(!ptr.is_null());
+        CStrBuf { ptr: ptr, dtor: maybe_dtor }
     }
 
-    /// Create a CString from a pointer. The returned CString will not
+    /// Create a `CStrBuf` from a pointer. The returned `CStrBuf` will not
     /// deallocate the string when dropped.
     ///
     ///# Failure
     ///
-    /// Fails if `buf` is null
-    pub unsafe fn new_unowned(buf: *const libc::c_char) -> CString {
-        CString::new_internal(buf, None)
+    /// Fails if `ptr` is null.
+    pub unsafe fn new_unowned(ptr: *const libc::c_char) -> CStrBuf {
+        CStrBuf::new_internal(ptr, None)
     }
 
-    /// Create a CString from a pointer. The returned CString will
+    /// Create a `CStrBuf` from a pointer. The returned `CStrBuf` will
     /// deallocate the string with the standard C function `free()`
     /// when dropped.
     ///
     ///# Failure
     ///
-    /// Fails if `buf` is null
-    pub unsafe fn new_libc(buf: *const libc::c_char) -> CString {
-        CString::new_with_dtor(buf, libc_free)
+    /// Fails if `ptr` is null.
+    pub unsafe fn new_libc(ptr: *const libc::c_char) -> CStrBuf {
+        CStrBuf::new_with_dtor(ptr, libc_free)
     }
 
-    /// Create a CString from a foreign pointer and a function to run
+    /// Create a `CStrBuf` from a foreign pointer and a closure to run
     /// upon destruction.
     ///
     ///# Failure
     ///
-    /// Fails if `buf` is null
-    pub unsafe fn new_with_dtor(buf: *const libc::c_char,
+    /// Fails if `ptr` is null.
+    pub unsafe fn new_with_dtor(ptr: *const libc::c_char,
+                                dtor: proc(*const libc::c_char):Send)
+                               -> CStrBuf {
+        CStrBuf::new_internal(ptr, Some(dtor))
+    }
+
+    /// Promote a `CStrBuf` into `CString` by calculating the string's length.
+    pub fn into_c_str(mut self) -> CString {
+        CString {
+            buf: CStrBuf { ptr: self.ptr, dtor: self.dtor.take() },
+            len: unsafe { libc::strlen(self.ptr) as uint }
+        }
+    }
+
+    /// Return a pointer to the NUL-terminated string data.
+    ///
+    /// `.as_ptr` returns an internal pointer into the `CStrBuf`, and
+    /// may be invalidated when the `CStrBuf` falls out of scope (the
+    /// destructor will run, freeing the allocation if there is
+    /// one).
+    pub fn as_ptr(&self) -> *const libc::c_char {
+        self.ptr
+    }
+
+    /// Return a mutable pointer to the NUL-terminated string data.
+    ///
+    /// `.as_mut_ptr` returns an internal pointer into the `CStrBuf`, and
+    /// may be invalidated when the `CStrBuf` falls out of scope (the
+    /// destructor will run, freeing the allocation if there is
+    /// one).
+    pub fn as_mut_ptr(&self) -> *mut libc::c_char {
+        self.ptr as *mut _
+    }
+
+    /// Returns an iterator over the string's bytes.
+    pub fn iter<'a>(&'a self) -> CChars<'a> {
+        CChars {
+            ptr: self.ptr,
+            marker: marker::ContravariantLifetime,
+        }
+    }
+
+    /// Unwraps the wrapped `*libc::c_char` from the `CStrBuf` wrapper
+    /// without running the destructor. If the string was allocated,
+    /// a user of `.unwrap()` should ensure the allocation is eventually
+    /// freed.
+    ///
+    /// Prefer `.as_ptr()` when just retrieving a pointer to the
+    /// string data, as that does not relinquish ownership.
+    pub unsafe fn unwrap(mut self) -> *const libc::c_char {
+        self.dtor = None;
+        self.ptr
+    }
+}
+
+impl CString {
+
+    unsafe fn new_internal(ptr: *const libc::c_char,
+                           len: uint,
+                           maybe_dtor: Option<proc(*const libc::c_char):Send>)
+                          -> CString {
+        assert!(!ptr.is_null());
+        assert!(*ptr.offset(len as int) == (NUL as libc::c_char));
+        CString { buf: CStrBuf::new_internal(ptr, maybe_dtor), len: len }
+    }
+
+    /// Create a `CString` from a pointer and pre-calculated length
+    /// (not including the terminating NUL).
+    /// The returned `CString` will not deallocate the string when dropped.
+    ///
+    ///# Failure
+    ///
+    /// Fails if `ptr` is null, or if the byte at `len` is not NUL.
+    pub unsafe fn new_unowned(ptr: *const libc::c_char, len: uint) -> CString {
+        CString::new_internal(ptr, len, None)
+    }
+
+    /// Create a `CString` from a pointer and pre-calculated length
+    /// (not including the terminating NUL).
+    /// The returned `CString` will deallocate the string with the standard
+    /// C function `free()` when dropped.
+    ///
+    ///# Failure
+    ///
+    /// Fails if `ptr` is null, or if the byte at `len` is not NUL.
+    pub unsafe fn new_libc(ptr: *const libc::c_char, len: uint) -> CString {
+        CString::new_with_dtor(ptr, len, libc_free)
+    }
+
+    /// Create a `CString` from a foreign pointer, a pre-calculated length
+    /// (not including the terminating NUL), and a closure to run upon
+    /// destruction.
+    ///
+    ///# Failure
+    ///
+    /// Fails if `ptr` is null, or if the byte at `len` is not NUL.
+    pub unsafe fn new_with_dtor(ptr: *const libc::c_char,
+                                len: uint,
                                 dtor: proc(*const libc::c_char):Send)
                                -> CString {
-        CString::new_internal(buf, Some(dtor))
+        CString::new_internal(ptr, len, Some(dtor))
     }
 
     /// Return a pointer to the NUL-terminated string data.
@@ -208,7 +315,7 @@ impl CString {
     /// }
     /// ```
     pub fn as_ptr(&self) -> *const libc::c_char {
-        self.buf
+        self.buf.as_ptr()
     }
 
     /// Return a mutable pointer to the NUL-terminated string data.
@@ -229,28 +336,28 @@ impl CString {
     /// let p = foo.to_c_str().as_mut_ptr();
     /// ```
     pub fn as_mut_ptr(&self) -> *mut libc::c_char {
-        self.buf as *mut _
+        self.buf.as_mut_ptr()
     }
 
-    /// Converts the CString into a `&[u8]` without copying.
+    /// Converts the `CString` into a `&[u8]` without copying.
     /// Includes the terminating NUL byte.
     #[inline]
     pub fn as_bytes<'a>(&'a self) -> &'a [u8] {
         unsafe {
-            mem::transmute(Slice { data: self.buf, len: self.len() + 1 })
+            mem::transmute(Slice { data: self.buf.ptr, len: self.len + 1 })
         }
     }
 
-    /// Converts the CString into a `&[u8]` without copying.
+    /// Converts the `CString` into a `&[u8]` without copying.
     /// Does not include the terminating NUL byte.
     #[inline]
     pub fn as_bytes_no_nul<'a>(&'a self) -> &'a [u8] {
         unsafe {
-            mem::transmute(Slice { data: self.buf, len: self.len() })
+            mem::transmute(Slice { data: self.buf.ptr, len: self.len })
         }
     }
 
-    /// Converts the CString into a `&str` without copying.
+    /// Converts the `CString` into a `&str` without copying.
     /// Returns None if the CString is not UTF-8.
     #[inline]
     pub fn as_str<'a>(&'a self) -> Option<&'a str> {
@@ -258,12 +365,9 @@ impl CString {
         str::from_utf8(buf)
     }
 
-    /// Return a CString iterator.
+    /// Returns an iterator over the string's bytes.
     pub fn iter<'a>(&'a self) -> CChars<'a> {
-        CChars {
-            ptr: self.buf,
-            marker: marker::ContravariantLifetime,
-        }
+        self.buf.iter()
     }
 
     /// Unwraps the wrapped `*libc::c_char` from the `CString` wrapper
@@ -273,18 +377,17 @@ impl CString {
     ///
     /// Prefer `.as_ptr()` when just retrieving a pointer to the
     /// string data, as that does not relinquish ownership.
-    pub unsafe fn unwrap(mut self) -> *const libc::c_char {
-        self.dtor.take();
-        self.buf
+    pub unsafe fn unwrap(self) -> *const libc::c_char {
+        self.buf.unwrap()
     }
 
 }
 
-impl Drop for CString {
+impl Drop for CStrBuf {
     fn drop(&mut self) {
         match self.dtor.take() {
             None => (),
-            Some(f) => f(self.buf)
+            Some(f) => f(self.ptr)
         }
     }
 }
@@ -292,9 +395,7 @@ impl Drop for CString {
 impl Collection for CString {
     /// Return the number of bytes in the CString (not including the NUL terminator).
     #[inline]
-    fn len(&self) -> uint {
-        unsafe { libc::strlen(self.buf) as uint }
-    }
+    fn len(&self) -> uint { self.len }
 }
 
 impl fmt::Show for CString {
@@ -399,8 +500,6 @@ impl ToCStr for String {
     }
 }
 
-const NUL: u8 = 0;
-
 // The length of the stack allocated buffer for `vec.with_c_str()`
 const BUF_LEN: uint = 128;
 
@@ -419,7 +518,7 @@ impl<'a> ToCStr for &'a [u8] {
                 self.as_ptr() as *const libc::c_char, self_len);
         *buf.offset(self_len as int) = 0;
 
-        CString::new_libc(buf as *const libc::c_char)
+        CString::new_libc(buf as *const libc::c_char, self_len)
     }
 
     fn with_c_str<T>(&self, f: |*const libc::c_char| -> T) -> T {
@@ -492,7 +591,7 @@ pub unsafe fn from_c_multistring(buf: *const libc::c_char,
     };
     while (!limited_count || ctr < limit)
           && *curr_ptr != 0 {
-        let cstr = CString::new_unowned(curr_ptr);
+        let cstr = CStrBuf::new_unowned(curr_ptr).into_c_str();
         f(&cstr);
         curr_ptr = curr_ptr.offset(cstr.len() as int + 1);
         ctr += 1;
@@ -511,7 +610,7 @@ mod tests {
     use std::task;
     use libc;
 
-    use super::{CString,ToCStr};
+    use super::{CStrBuf,CString,ToCStr};
     use super::from_c_multistring;
 
     #[test]
@@ -661,8 +760,14 @@ mod tests {
 
     #[test]
     #[should_fail]
-    fn test_new_fail() {
-        let _c_str = unsafe { CString::new_unowned(ptr::null()) };
+    fn test_buf_new_fail() {
+        let _c_str = unsafe { CStrBuf::new_unowned(ptr::null()) };
+    }
+
+    #[test]
+    #[should_fail]
+    fn test_str_new_fail() {
+        let _c_str = unsafe { CString::new_unowned(ptr::null(), 1) };
     }
 }
 
