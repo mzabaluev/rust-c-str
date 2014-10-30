@@ -216,7 +216,8 @@ impl CStrBuf {
         CStrBuf::new_internal(ptr, Some(dtor))
     }
 
-    /// Promote a `CStrBuf` into `CString` by calculating the string's length.
+    /// Promote the `CStrBuf` into `CString` by calculating the string's
+    /// length.
     pub fn into_c_str(mut self) -> CString {
         CString {
             buf: CStrBuf { ptr: self.ptr, dtor: self.dtor.take() },
@@ -387,7 +388,7 @@ impl CString {
     }
 
     /// Converts the `CString` into a `&str` without copying.
-    /// Returns None if the CString is not UTF-8.
+    /// Returns `None` if the string is not UTF-8.
     #[inline]
     pub fn as_str<'a>(&'a self) -> Option<&'a str> {
         let buf = self.as_bytes_no_nul();
