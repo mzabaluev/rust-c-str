@@ -68,9 +68,8 @@ fn main() {
 
 #![no_implicit_prelude]
 
-use std::string::String;
-use std::hash;
 use std::fmt;
+use std::hash;
 use std::kinds::Send;
 use std::kinds::marker;
 use std::mem;
@@ -82,6 +81,8 @@ use std::ptr;
 use std::raw::Slice;
 use std::slice;
 use std::str;
+use std::string;
+use std::string::String;
 use libc;
 
 const NUL: u8 = 0;
@@ -222,6 +223,20 @@ impl CStrBuf {
         CString {
             buf: CStrBuf { ptr: self.ptr, dtor: self.dtor.take() },
             len: unsafe { libc::strlen(self.ptr) as uint }
+        }
+    }
+
+    /// Copies the `CStrBuf` into a `String`.
+    /// Returns `None` if the string is not UTF-8.
+    pub fn to_string(&self) -> Option<String> {
+        unsafe {
+            let len = libc::strlen(self.ptr) as uint;
+            let ptr = self.ptr as *const u8;
+            if slice::raw::buf_as_slice(ptr, len, |v| { str::is_utf8(v) }) {
+                Some(string::raw::from_buf_len(ptr, len))
+            } else {
+                None
+            }
         }
     }
 
@@ -646,6 +661,7 @@ mod tests {
     use std::ptr::RawPtr;
     use std::slice::ImmutableSlice;
     use std::str::StrSlice;
+    use std::string::String;
     use std::task;
     use libc;
 
@@ -796,6 +812,16 @@ mod tests {
         assert_eq!(c_str.as_str(), Some(""));
         let c_str = b"foo\xFF".to_c_str();
         assert_eq!(c_str.as_str(), None);
+    }
+
+    #[test]
+    fn test_to_string() {
+        let c_buf = unsafe { buf_dup(b"hello".as_ptr(), 5) };
+        assert_eq!(c_buf.to_string(), Some(String::from_str("hello")));
+        let c_buf = unsafe { buf_dup(b"".as_ptr(), 0) };
+        assert_eq!(c_buf.to_string(), Some(String::from_str("")));
+        let c_buf = unsafe { buf_dup(b"foo\xFF".as_ptr(), 4) };
+        assert_eq!(c_buf.to_string(), None);
     }
 
     #[test]
