@@ -6,6 +6,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+//! # C compatibility helpers
+//!
+//! This library provides utilities for working with foreign function
+//! interfaces using data layout and allocation conventions of the
+//! C language.
+
 #![crate_name = "c_compat"]
 #![crate_type = "lib"]
 
