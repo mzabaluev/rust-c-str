@@ -25,9 +25,9 @@ translated to C strings.
 
 # Creation of a C string
 
-A C string is managed through the `CString` type defined in this module. It
-"owns" the internal buffer of characters and will call a destructor closure
-when the string is dropped.
+A C string is managed through the types `CString` and `CStrBuf` defined
+in this module. Values of these types "own" an internal buffer of characters
+and will call a destructor closure when the string is dropped.
 The `ToCStr` trait is implemented for `&str` and `&[u8]`, but the conversions
 can fail due to some of the limitations explained above.
 
