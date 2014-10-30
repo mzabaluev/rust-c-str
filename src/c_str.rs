@@ -536,19 +536,11 @@ const BUF_LEN: uint = 128;
 impl<'a> ToCStr for &'a [u8] {
     fn to_c_str(&self) -> CString {
         assert!(!self.contains(&NUL));
-        let cs = unsafe { self.to_c_str_unchecked() };
-        cs
+        unsafe { self.to_c_str_unchecked() }
     }
 
     unsafe fn to_c_str_unchecked(&self) -> CString {
-        let self_len = self.len();
-        let buf = libc_malloc(self_len + 1);
-
-        ptr::copy_nonoverlapping_memory(buf,
-                self.as_ptr() as *const libc::c_char, self_len);
-        *buf.offset(self_len as int) = 0;
-
-        CString::new_libc(buf as *const libc::c_char, self_len)
+        str_dup(self.as_ptr(), self.len())
     }
 
     fn with_c_str<T>(&self, f: |*const libc::c_char| -> T) -> T {
@@ -558,6 +550,20 @@ impl<'a> ToCStr for &'a [u8] {
     unsafe fn with_c_str_unchecked<T>(&self, f: |*const libc::c_char| -> T) -> T {
         with_c_str(*self, false, f)
     }
+}
+
+unsafe fn buf_dup(ptr: *const u8, len: uint) -> CStrBuf {
+    let copy = libc_malloc(len + 1);
+
+    ptr::copy_nonoverlapping_memory(copy,
+            ptr as *const libc::c_char, len);
+    *copy.offset(len as int) = 0;
+
+    CStrBuf::new_libc(copy as *const libc::c_char)
+}
+
+unsafe fn str_dup(ptr: *const u8, len: uint) -> CString {
+    CString { buf: buf_dup(ptr, len), len: len }
 }
 
 // Unsafe function that handles possibly copying the &[u8] into a stack array.
@@ -645,7 +651,7 @@ mod tests {
 
     use super::{CStrBuf,CString,ToCStr};
     use super::from_c_multistring;
-    use super::libc_malloc;
+    use super::buf_dup;
 
     #[test]
     fn test_str_multistring_parsing() {
@@ -806,12 +812,7 @@ mod tests {
 
     #[test]
     fn test_into_c_str() {
-        let buf = unsafe {
-            let p = libc_malloc(6);
-            ptr::copy_nonoverlapping_memory(
-                    p, b"hello\0".as_ptr() as *const libc::c_char, 6);
-            CStrBuf::new_libc(p as *const libc::c_char)
-        };
+        let buf = unsafe { buf_dup(b"hello".as_ptr(), 5) };
         let c_str = buf.into_c_str();
         assert_eq!(c_str.as_bytes(), b"hello\0");
     }
