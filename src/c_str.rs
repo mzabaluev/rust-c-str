@@ -580,7 +580,10 @@ unsafe fn with_c_str<T>(v: &[u8], checked: bool,
     f(c_str.as_ptr())
 }
 
-/// External iterator for a CString's bytes.
+/// External iterator for C string's bytes.
+///
+/// The iteration stops when the terminating NUL byte is reached, without
+/// returning the NUL.
 ///
 /// Use with the `std::iter` module.
 pub struct CChars<'a> {
