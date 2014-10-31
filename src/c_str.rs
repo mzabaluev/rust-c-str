@@ -602,6 +602,46 @@ unsafe fn with_c_str<T>(v: &[u8], checked: bool,
     f(c_str.as_ptr())
 }
 
+impl ToCStr for CStrBuf {
+
+    #[inline]
+    fn to_c_str(&self) -> CString {
+        unsafe { self.to_c_str_unchecked() }
+    }
+
+    unsafe fn to_c_str_unchecked(&self) -> CString {
+        str_dup(self.ptr as *const u8, libc::strlen(self.ptr) as uint)
+    }
+
+    fn with_c_str<T>(&self, f: |*const libc::c_char| -> T) -> T {
+        f(self.ptr)
+    }
+
+    unsafe fn with_c_str_unchecked<T>(&self, f: |*const libc::c_char| -> T) -> T {
+        f(self.ptr)
+    }
+}
+
+impl ToCStr for CString {
+
+    #[inline]
+    fn to_c_str(&self) -> CString {
+        unsafe { self.to_c_str_unchecked() }
+    }
+
+    unsafe fn to_c_str_unchecked(&self) -> CString {
+        str_dup(self.buf.ptr as *const u8, self.len)
+    }
+
+    fn with_c_str<T>(&self, f: |*const libc::c_char| -> T) -> T {
+        self.buf.with_c_str(f)
+    }
+
+    unsafe fn with_c_str_unchecked<T>(&self, f: |*const libc::c_char| -> T) -> T {
+        self.buf.with_c_str_unchecked(f)
+    }
+}
+
 /// External iterator for C string's bytes.
 ///
 /// The iteration stops when the terminating NUL byte is reached, without
@@ -655,6 +695,7 @@ pub unsafe fn from_c_multistring(buf: *const libc::c_char,
 
 #[cfg(test)]
 mod tests {
+    use std::collections::Collection;
     use std::iter::Iterator;
     use std::option::{None,Some};
     use std::ptr;
@@ -728,6 +769,70 @@ mod tests {
         }
 
         let c_str = b"foo\xFF".to_c_str();
+        let buf = c_str.as_ptr();
+        unsafe {
+            assert_eq!(*buf.offset(0), 'f' as libc::c_char);
+            assert_eq!(*buf.offset(1), 'o' as libc::c_char);
+            assert_eq!(*buf.offset(2), 'o' as libc::c_char);
+            assert_eq!(*buf.offset(3), 0xffu8 as i8);
+            assert_eq!(*buf.offset(4), 0);
+        }
+    }
+
+    #[test]
+    fn test_c_buf_to_c_str() {
+        let c_buf = c_buf_from_bytes(b"");
+        let c_str = c_buf.to_c_str();
+        unsafe {
+            assert_eq!(*c_str.as_ptr().offset(0), 0);
+        }
+
+        let c_buf = c_buf_from_bytes(b"hello");
+        let c_str = c_buf.to_c_str();
+        let buf = c_str.as_ptr();
+        unsafe {
+            assert_eq!(*buf.offset(0), 'h' as libc::c_char);
+            assert_eq!(*buf.offset(1), 'e' as libc::c_char);
+            assert_eq!(*buf.offset(2), 'l' as libc::c_char);
+            assert_eq!(*buf.offset(3), 'l' as libc::c_char);
+            assert_eq!(*buf.offset(4), 'o' as libc::c_char);
+            assert_eq!(*buf.offset(5), 0);
+        }
+
+        let c_buf = c_buf_from_bytes(b"foo\xFF");
+        let c_str = c_buf.to_c_str();
+        let buf = c_str.as_ptr();
+        unsafe {
+            assert_eq!(*buf.offset(0), 'f' as libc::c_char);
+            assert_eq!(*buf.offset(1), 'o' as libc::c_char);
+            assert_eq!(*buf.offset(2), 'o' as libc::c_char);
+            assert_eq!(*buf.offset(3), 0xffu8 as i8);
+            assert_eq!(*buf.offset(4), 0);
+        }
+    }
+
+    #[test]
+    fn test_c_str_to_c_str() {
+        let c_str = b"".to_c_str();
+        let c_str = c_str.to_c_str();
+        unsafe {
+            assert_eq!(*c_str.as_ptr().offset(0), 0);
+        }
+
+        let c_str = b"hello".to_c_str();
+        let c_str = c_str.to_c_str();
+        let buf = c_str.as_ptr();
+        unsafe {
+            assert_eq!(*buf.offset(0), 'h' as libc::c_char);
+            assert_eq!(*buf.offset(1), 'e' as libc::c_char);
+            assert_eq!(*buf.offset(2), 'l' as libc::c_char);
+            assert_eq!(*buf.offset(3), 'l' as libc::c_char);
+            assert_eq!(*buf.offset(4), 'o' as libc::c_char);
+            assert_eq!(*buf.offset(5), 0);
+        }
+
+        let c_str = b"foo\xFF".to_c_str();
+        let c_str = c_str.to_c_str();
         let buf = c_str.as_ptr();
         unsafe {
             assert_eq!(*buf.offset(0), 'f' as libc::c_char);
