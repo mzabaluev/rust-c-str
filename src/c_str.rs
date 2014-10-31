@@ -669,6 +669,10 @@ mod tests {
     use super::from_c_multistring;
     use super::buf_dup;
 
+    fn c_buf_from_bytes(v: &[u8]) -> CStrBuf {
+        unsafe { buf_dup(v.as_ptr(), v.len()) }
+    }
+
     #[test]
     fn test_str_multistring_parsing() {
         unsafe {
@@ -816,11 +820,11 @@ mod tests {
 
     #[test]
     fn test_to_string() {
-        let c_buf = unsafe { buf_dup(b"hello".as_ptr(), 5) };
+        let c_buf = c_buf_from_bytes(b"hello");;
         assert_eq!(c_buf.to_string(), Some(String::from_str("hello")));
-        let c_buf = unsafe { buf_dup(b"".as_ptr(), 0) };
+        let c_buf = c_buf_from_bytes(b"");
         assert_eq!(c_buf.to_string(), Some(String::from_str("")));
-        let c_buf = unsafe { buf_dup(b"foo\xFF".as_ptr(), 4) };
+        let c_buf = c_buf_from_bytes(b"foo\xFF");
         assert_eq!(c_buf.to_string(), None);
     }
 
@@ -838,7 +842,7 @@ mod tests {
 
     #[test]
     fn test_into_c_str() {
-        let buf = unsafe { buf_dup(b"hello".as_ptr(), 5) };
+        let buf = c_buf_from_bytes(b"hello");
         let c_str = buf.into_c_str();
         assert_eq!(c_str.as_bytes(), b"hello\0");
     }
