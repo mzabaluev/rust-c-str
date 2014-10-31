@@ -167,7 +167,7 @@ fn libc_malloc(size: uint) -> *mut libc::c_char {
     let buf = unsafe {
             libc::malloc(size as libc::size_t) as *mut libc::c_char
         };
-    if buf.is_null() { fail!("out of memory") }
+    if buf.is_null() { panic!("out of memory") }
     buf
 }
 
