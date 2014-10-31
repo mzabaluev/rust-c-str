@@ -6,7 +6,7 @@ all:
 clean:
 	$(CARGO) clean
 
-check:
+check: all
 	$(CARGO) test
 
 .PHONY: all clean check
