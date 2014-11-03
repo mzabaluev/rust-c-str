@@ -70,8 +70,7 @@ fn main() {
 
 use std::fmt;
 use std::hash;
-use std::kinds::Send;
-use std::kinds::marker;
+use std::kinds::{Send,Sized,marker};
 use std::mem;
 use std::prelude::{Drop, Eq, ImmutablePartialEqSlice};
 use std::prelude::{ImmutableSlice, Iterator};
@@ -453,7 +452,7 @@ impl fmt::Show for CString {
 }
 
 /// A generic trait for converting a value to a CString.
-pub trait ToCStr {
+pub trait ToCStr for Sized? {
     /// Copy the receiver into a CString.
     ///
     /// # Failure
@@ -496,15 +495,7 @@ pub trait ToCStr {
     }
 }
 
-// FIXME (#12938): Until DST lands, we cannot decompose &str into &
-// and str, so we cannot usefully take ToCStr arguments by reference
-// (without forcing an additional & around &str). So we are instead
-// temporarily adding an instance for ~str and String, so that we can
-// take ToCStr as owned. When DST lands, the string instances should
-// be revisited, and arguments bound by ToCStr should be passed by
-// reference.
-
-impl<'a> ToCStr for &'a str {
+impl ToCStr for str {
     #[inline]
     fn to_c_str(&self) -> CString {
         self.as_bytes().to_c_str()
@@ -551,7 +542,7 @@ impl ToCStr for String {
 // The length of the stack allocated buffer for `vec.with_c_str()`
 const BUF_LEN: uint = 128;
 
-impl<'a> ToCStr for &'a [u8] {
+impl<'a> ToCStr for [u8] {
     fn to_c_str(&self) -> CString {
         assert!(!self.contains(&NUL));
         unsafe { self.to_c_str_unchecked() }
@@ -562,11 +553,33 @@ impl<'a> ToCStr for &'a [u8] {
     }
 
     fn with_c_str<T>(&self, f: |*const libc::c_char| -> T) -> T {
-        unsafe { with_c_str(*self, true, f) }
+        unsafe { with_c_str(self, true, f) }
     }
 
     unsafe fn with_c_str_unchecked<T>(&self, f: |*const libc::c_char| -> T) -> T {
-        with_c_str(*self, false, f)
+        with_c_str(self, false, f)
+    }
+}
+
+impl<'a, Sized? T: ToCStr> ToCStr for &'a T {
+    #[inline]
+    fn to_c_str(&self) -> CString {
+        (**self).to_c_str()
+    }
+
+    #[inline]
+    unsafe fn to_c_str_unchecked(&self) -> CString {
+        (**self).to_c_str_unchecked()
+    }
+
+    #[inline]
+    fn with_c_str<T>(&self, f: |*const libc::c_char| -> T) -> T {
+        (**self).with_c_str(f)
+    }
+
+    #[inline]
+    unsafe fn with_c_str_unchecked<T>(&self, f: |*const libc::c_char| -> T) -> T {
+        (**self).with_c_str_unchecked(f)
     }
 }
 

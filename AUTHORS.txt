@@ -7,6 +7,7 @@ Felix Raimundo <felix.raimundo@telecom-paristech.fr>
 gamazeps <gamaz3ps@gmail.com>
 Huon Wilson <dbau.pp+github@gmail.com>
 Jonas Hietala <tradet.h@gmail.com>
+Jorge Aparicio <japaricious@gmail.com>
 Joseph Crail <jbcrail@gmail.com>
 Julian Orth <ju.orth@gmail.com>
 Mikhail Zabaluev <mikhail.zabaluev@gmail.com>
