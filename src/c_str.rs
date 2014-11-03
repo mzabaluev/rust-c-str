@@ -73,7 +73,7 @@ use std::hash;
 use std::kinds::Send;
 use std::kinds::marker;
 use std::mem;
-use std::prelude::{Collection, Drop, Eq, ImmutablePartialEqSlice};
+use std::prelude::{Drop, Eq, ImmutablePartialEqSlice};
 use std::prelude::{ImmutableSlice, Iterator};
 use std::prelude::{None, Option, Ord, Ordering, PartialEq};
 use std::prelude::{PartialOrd, RawPtr, Some, StrSlice};
@@ -279,6 +279,9 @@ impl CStrBuf {
         self.dtor = None;
         self.ptr
     }
+
+    /// Returns true if the wrapped string is empty.
+    pub fn is_empty(&self) -> bool { unsafe { *self.ptr == 0 } }
 }
 
 impl CString {
@@ -426,6 +429,12 @@ impl CString {
         self.buf.unwrap()
     }
 
+    /// Return the number of bytes in the CString
+    /// (not including the NUL terminator).
+    pub fn len(&self) -> uint { self.len }
+
+    /// Returns true if the string is empty.
+    pub fn is_empty(&self) -> bool { self.len == 0 }
 }
 
 impl Drop for CStrBuf {
@@ -435,12 +444,6 @@ impl Drop for CStrBuf {
             Some(f) => f(self.ptr)
         }
     }
-}
-
-impl Collection for CString {
-    /// Return the number of bytes in the CString (not including the NUL terminator).
-    #[inline]
-    fn len(&self) -> uint { self.len }
 }
 
 impl fmt::Show for CString {
@@ -695,7 +698,6 @@ pub unsafe fn from_c_multistring(buf: *const libc::c_char,
 
 #[cfg(test)]
 mod tests {
-    use std::collections::Collection;
     use std::iter::Iterator;
     use std::option::{None,Some};
     use std::ptr;
@@ -957,7 +959,6 @@ mod tests {
 mod bench {
     use test::Bencher;
     use libc;
-    use std::collections::Collection;
     use std::iter::range;
     use std::ptr::RawPtr;
     use std::str::StrSlice;
