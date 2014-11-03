@@ -249,16 +249,6 @@ impl CStrBuf {
         self.ptr
     }
 
-    /// Return a mutable pointer to the NUL-terminated string data.
-    ///
-    /// `.as_mut_ptr` returns an internal pointer into the `CStrBuf`, and
-    /// may be invalidated when the `CStrBuf` falls out of scope (the
-    /// destructor will run, freeing the allocation if there is
-    /// one).
-    pub fn as_mut_ptr(&self) -> *mut libc::c_char {
-        self.ptr as *mut _
-    }
-
     /// Returns an iterator over the string's bytes.
     pub fn iter<'a>(&'a self) -> CChars<'a> {
         CChars {
@@ -363,27 +353,6 @@ impl CString {
     /// ```
     pub fn as_ptr(&self) -> *const libc::c_char {
         self.buf.as_ptr()
-    }
-
-    /// Return a mutable pointer to the NUL-terminated string data.
-    ///
-    /// `.as_mut_ptr` returns an internal pointer into the `CString`, and
-    /// may be invalidated when the `CString` falls out of scope (the
-    /// destructor will run, freeing the allocation if there is
-    /// one).
-    ///
-    /// ```rust
-    /// let foo = "some string";
-    ///
-    /// // right
-    /// let mut x = foo.to_c_str();
-    /// let p = x.as_mut_ptr();
-    ///
-    /// // wrong (the CString will be freed, invalidating `p`)
-    /// let p = foo.to_c_str().as_mut_ptr();
-    /// ```
-    pub fn as_mut_ptr(&self) -> *mut libc::c_char {
-        self.buf.as_mut_ptr()
     }
 
     /// Converts the `CString` into a `&[u8]` without copying.
