@@ -258,6 +258,13 @@ impl CStrBuf {
         self.ptr
     }
 
+    /// Returns false if the `CStrBuf` was created with
+    /// `CStrBuf::new_unowned`, otherwise returns true.
+    #[deprecated]
+    pub fn owns_buffer(&self) -> bool {
+        self.dtor.is_some()
+    }
+
     /// Returns an iterator over the string's bytes.
     pub fn iter<'a>(&'a self) -> CChars<'a> {
         CChars {
@@ -362,6 +369,14 @@ impl CString {
     /// ```
     pub fn as_ptr(&self) -> *const libc::c_char {
         self.buf.as_ptr()
+    }
+
+    /// Returns false if the `CString` was created with
+    /// `CString::new_unowned`, otherwise returns true.
+    #[deprecated]
+    #[allow(deprecated)]
+    pub fn owns_buffer(&self) -> bool {
+        self.buf.owns_buffer()
     }
 
     /// Converts the `CString` into a `&[u8]` without copying.
