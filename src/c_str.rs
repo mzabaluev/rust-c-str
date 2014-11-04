@@ -75,13 +75,14 @@ use std::mem;
 use std::prelude::{Drop, Eq, ImmutablePartialEqSlice};
 use std::prelude::{ImmutableSlice, Iterator};
 use std::prelude::{None, Option, Ord, Ordering, PartialEq};
-use std::prelude::{PartialOrd, RawPtr, Some, StrSlice};
+use std::prelude::{PartialOrd, RawPtr, Some, StrSlice, Vec};
 use std::ptr;
 use std::raw::Slice;
 use std::slice;
 use std::str;
 use std::string;
 use std::string::String;
+use std::vec;
 use libc;
 
 const NUL: u8 = 0;
@@ -236,6 +237,14 @@ impl CStrBuf {
             } else {
                 None
             }
+        }
+    }
+
+    /// Copies the `CStrBuf` into a vector of bytes.
+    pub fn to_vec(&self) -> Vec<u8> {
+        unsafe {
+            let len = libc::strlen(self.ptr) as uint;
+            vec::raw::from_buf(self.ptr as *const u8, len)
         }
     }
 
@@ -688,6 +697,7 @@ mod tests {
     use std::str::StrSlice;
     use std::string::String;
     use std::task;
+    use std::slice::CloneableVector;
     use libc;
 
     use super::{CStrBuf,CString,ToCStr};
@@ -915,6 +925,16 @@ mod tests {
         assert_eq!(c_buf.to_string(), Some(String::from_str("")));
         let c_buf = c_buf_from_bytes(b"foo\xFF");
         assert_eq!(c_buf.to_string(), None);
+    }
+
+    #[test]
+    fn test_to_vec() {
+        let c_buf = c_buf_from_bytes(b"hello");;
+        assert_eq!(c_buf.to_vec(), b"hello".to_vec());
+        let c_buf = c_buf_from_bytes(b"");
+        assert_eq!(c_buf.to_vec(), b"".to_vec());
+        let c_buf = c_buf_from_bytes(b"foo\xFF");
+        assert_eq!(c_buf.to_vec(), b"foo\xFF".to_vec());
     }
 
     #[test]
