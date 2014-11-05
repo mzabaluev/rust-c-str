@@ -98,7 +98,7 @@ const NUL: u8 = 0;
 /// `CStrBuf` into `CString` using the method `.into_c_str()`.
 pub struct CStrBuf {
     ptr: *const libc::c_char,
-    dtor: Option<proc(*const libc::c_char):Send>
+    dtor: Option<proc(*mut libc::c_char):Send>
 }
 
 /// A length-aware representation of a C string.
@@ -171,14 +171,14 @@ fn libc_malloc(size: uint) -> *mut libc::c_char {
     buf
 }
 
-fn libc_free(buf: *const libc::c_char) {
+fn libc_free(buf: *mut libc::c_char) {
     unsafe { libc::free(buf as *mut libc::c_void); }
 }
 
 impl CStrBuf {
 
     unsafe fn new_internal(ptr: *const libc::c_char,
-                           maybe_dtor: Option<proc(*const libc::c_char):Send>)
+                           maybe_dtor: Option<proc(*mut libc::c_char):Send>)
                           -> CStrBuf {
         assert!(!ptr.is_null());
         CStrBuf { ptr: ptr, dtor: maybe_dtor }
@@ -201,7 +201,7 @@ impl CStrBuf {
     ///# Failure
     ///
     /// Fails if `ptr` is null.
-    pub unsafe fn new_libc(ptr: *const libc::c_char) -> CStrBuf {
+    pub unsafe fn new_libc(ptr: *mut libc::c_char) -> CStrBuf {
         CStrBuf::new_with_dtor(ptr, libc_free)
     }
 
@@ -211,10 +211,10 @@ impl CStrBuf {
     ///# Failure
     ///
     /// Fails if `ptr` is null.
-    pub unsafe fn new_with_dtor(ptr: *const libc::c_char,
-                                dtor: proc(*const libc::c_char):Send)
+    pub unsafe fn new_with_dtor(ptr: *mut libc::c_char,
+                                dtor: proc(*mut libc::c_char):Send)
                                -> CStrBuf {
-        CStrBuf::new_internal(ptr, Some(dtor))
+        CStrBuf::new_internal(ptr as *const libc::c_char, Some(dtor))
     }
 
     /// Promote the `CStrBuf` into `CString` by calculating the string's
@@ -293,7 +293,7 @@ impl CString {
 
     unsafe fn new_internal(ptr: *const libc::c_char,
                            len: uint,
-                           maybe_dtor: Option<proc(*const libc::c_char):Send>)
+                           maybe_dtor: Option<proc(*mut libc::c_char):Send>)
                           -> CString {
         assert!(!ptr.is_null());
         assert!(*ptr.offset(len as int) == (NUL as libc::c_char));
@@ -319,7 +319,7 @@ impl CString {
     ///# Failure
     ///
     /// Fails if `ptr` is null, or if the byte at `len` is not NUL.
-    pub unsafe fn new_libc(ptr: *const libc::c_char, len: uint) -> CString {
+    pub unsafe fn new_libc(ptr: *mut libc::c_char, len: uint) -> CString {
         CString::new_with_dtor(ptr, len, libc_free)
     }
 
@@ -330,11 +330,11 @@ impl CString {
     ///# Failure
     ///
     /// Fails if `ptr` is null, or if the byte at `len` is not NUL.
-    pub unsafe fn new_with_dtor(ptr: *const libc::c_char,
+    pub unsafe fn new_with_dtor(ptr: *mut libc::c_char,
                                 len: uint,
-                                dtor: proc(*const libc::c_char):Send)
+                                dtor: proc(*mut libc::c_char):Send)
                                -> CString {
-        CString::new_internal(ptr, len, Some(dtor))
+        CString::new_internal(ptr as *const libc::c_char, len, Some(dtor))
     }
 
     /// Return a pointer to the NUL-terminated string data.
@@ -433,7 +433,7 @@ impl Drop for CStrBuf {
     fn drop(&mut self) {
         match self.dtor.take() {
             None => (),
-            Some(f) => f(self.ptr)
+            Some(f) => f(self.ptr as *mut libc::c_char)
         }
     }
 }
@@ -583,7 +583,7 @@ unsafe fn buf_dup(ptr: *const u8, len: uint) -> CStrBuf {
             ptr as *const libc::c_char, len);
     *copy.offset(len as int) = 0;
 
-    CStrBuf::new_libc(copy as *const libc::c_char)
+    CStrBuf::new_libc(copy)
 }
 
 unsafe fn str_dup(ptr: *const u8, len: uint) -> CString {
