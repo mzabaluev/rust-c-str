@@ -456,8 +456,11 @@ pub trait ToCStr for Sized? {
     /// Unsafe variant of `to_c_str()` that doesn't check for nulls.
     unsafe fn to_c_str_unchecked(&self) -> CString;
 
-    /// Work with a temporary CString constructed from the receiver.
-    /// The provided `*libc::c_char` will be freed immediately upon return.
+    /// Work with a null-terminated string constructed from the receiver.
+    /// This may be more efficient than using the result of `.to_c_str()`
+    /// because the implementation may avoid a dynamic memory allocation.
+    /// The string pointer passed to the closure is invalidated
+    /// immediately upon return.
     ///
     /// # Example
     ///
