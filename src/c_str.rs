@@ -444,7 +444,9 @@ impl fmt::Show for CString {
 
 /// A generic trait for converting a value to a CString.
 pub trait ToCStr for Sized? {
-    /// Copy the receiver into a CString.
+    /// Copy the receiver into a `CString`.
+    /// The caller should not make any assumptions about the way the
+    /// resulting string is allocated.
     ///
     /// # Failure
     ///
