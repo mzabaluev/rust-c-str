@@ -381,7 +381,6 @@ impl CString {
 
     /// Converts the `CString` into a `&[u8]` without copying.
     /// Includes the terminating NUL byte.
-    #[inline]
     pub fn as_bytes<'a>(&'a self) -> &'a [u8] {
         unsafe {
             mem::transmute(Slice { data: self.buf.ptr, len: self.len + 1 })
@@ -390,7 +389,6 @@ impl CString {
 
     /// Converts the `CString` into a `&[u8]` without copying.
     /// Does not include the terminating NUL byte.
-    #[inline]
     pub fn as_bytes_no_nul<'a>(&'a self) -> &'a [u8] {
         unsafe {
             mem::transmute(Slice { data: self.buf.ptr, len: self.len })
