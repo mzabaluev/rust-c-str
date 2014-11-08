@@ -489,6 +489,21 @@ pub trait ToCStr for Sized? {
         let c_str = self.to_c_str_unchecked();
         f(c_str.as_ptr())
     }
+
+    /// Like `.with_c_str()`, with the length of the string also passed to
+    /// the closure.
+    #[inline]
+    fn with_c_str_len<T>(&self, f: |*const libc::c_char, uint| -> T) -> T {
+        let c_str = self.to_c_str();
+        f(c_str.as_ptr(), c_str.len())
+    }
+
+    /// Unsafe variant of `with_c_str_len()` that doesn't check for nulls.
+    #[inline]
+    unsafe fn with_c_str_len_unchecked<T>(&self, f: |*const libc::c_char, uint| -> T) -> T {
+        let c_str = self.to_c_str_unchecked();
+        f(c_str.as_ptr(), c_str.len())
+    }
 }
 
 impl ToCStr for str {
@@ -510,6 +525,16 @@ impl ToCStr for str {
     #[inline]
     unsafe fn with_c_str_unchecked<T>(&self, f: |*const libc::c_char| -> T) -> T {
         self.as_bytes().with_c_str_unchecked(f)
+    }
+
+    #[inline]
+    fn with_c_str_len<T>(&self, f: |*const libc::c_char, uint| -> T) -> T {
+        self.as_bytes().with_c_str_len(f)
+    }
+
+    #[inline]
+    unsafe fn with_c_str_len_unchecked<T>(&self, f: |*const libc::c_char, uint| -> T) -> T {
+        self.as_bytes().with_c_str_len_unchecked(f)
     }
 }
 
@@ -533,6 +558,16 @@ impl ToCStr for String {
     unsafe fn with_c_str_unchecked<T>(&self, f: |*const libc::c_char| -> T) -> T {
         self.as_bytes().with_c_str_unchecked(f)
     }
+
+    #[inline]
+    fn with_c_str_len<T>(&self, f: |*const libc::c_char, uint| -> T) -> T {
+        self.as_bytes().with_c_str_len(f)
+    }
+
+    #[inline]
+    unsafe fn with_c_str_len_unchecked<T>(&self, f: |*const libc::c_char, uint| -> T) -> T {
+        self.as_bytes().with_c_str_len_unchecked(f)
+    }
 }
 
 // The length of the stack allocated buffer for `vec.with_c_str()`
@@ -554,6 +589,14 @@ impl<'a> ToCStr for [u8] {
 
     unsafe fn with_c_str_unchecked<T>(&self, f: |*const libc::c_char| -> T) -> T {
         with_c_str(self, false, f)
+    }
+
+    fn with_c_str_len<T>(&self, f: |*const libc::c_char, uint| -> T) -> T {
+        unsafe { with_c_str_len(self, true, f) }
+    }
+
+    unsafe fn with_c_str_len_unchecked<T>(&self, f: |*const libc::c_char, uint| -> T) -> T {
+        with_c_str_len(self, false, f)
     }
 }
 
@@ -577,6 +620,16 @@ impl<'a, Sized? T: ToCStr> ToCStr for &'a T {
     unsafe fn with_c_str_unchecked<T>(&self, f: |*const libc::c_char| -> T) -> T {
         (**self).with_c_str_unchecked(f)
     }
+
+    #[inline]
+    fn with_c_str_len<T>(&self, f: |*const libc::c_char, uint| -> T) -> T {
+        (**self).with_c_str_len(f)
+    }
+
+    #[inline]
+    unsafe fn with_c_str_len_unchecked<T>(&self, f: |*const libc::c_char, uint| -> T) -> T {
+        (**self).with_c_str_len_unchecked(f)
+    }
 }
 
 unsafe fn buf_dup(ptr: *const u8, len: uint) -> CStrBuf {
@@ -594,24 +647,30 @@ unsafe fn str_dup(ptr: *const u8, len: uint) -> CString {
 }
 
 // Unsafe function that handles possibly copying the &[u8] into a stack array.
-unsafe fn with_c_str<T>(v: &[u8], checked: bool,
-                        f: |*const libc::c_char| -> T) -> T {
-    let c_str = if v.len() < BUF_LEN {
+unsafe fn with_c_str_len<T>(v: &[u8], checked: bool,
+                            f: |*const libc::c_char, uint| -> T) -> T {
+    let len = v.len();
+    let c_str = if len < BUF_LEN {
         if checked {
             assert!(!v.contains(&NUL));
         }
         let mut buf: [u8, .. BUF_LEN] = mem::uninitialized();
         slice::bytes::copy_memory(buf, v);
-        buf[v.len()] = 0;
+        buf[len] = 0;
 
-        return f(buf.as_ptr() as *const libc::c_char)
+        return f(buf.as_ptr() as *const libc::c_char, len)
     } else if checked {
         v.to_c_str()
     } else {
         v.to_c_str_unchecked()
     };
 
-    f(c_str.as_ptr())
+    f(c_str.as_ptr(), len)
+}
+
+unsafe fn with_c_str<T>(v: &[u8], checked: bool,
+                        f: |*const libc::c_char| -> T) -> T {
+    with_c_str_len(v, checked, |p, _| { f(p) })
 }
 
 impl ToCStr for CStrBuf {
@@ -632,6 +691,16 @@ impl ToCStr for CStrBuf {
     unsafe fn with_c_str_unchecked<T>(&self, f: |*const libc::c_char| -> T) -> T {
         f(self.ptr)
     }
+
+    fn with_c_str_len<T>(&self, f: |*const libc::c_char, uint| -> T) -> T {
+        let len = unsafe { libc::strlen(self.ptr) as uint };
+        f(self.ptr, len)
+    }
+
+    unsafe fn with_c_str_len_unchecked<T>(&self, f: |*const libc::c_char, uint| -> T) -> T {
+        let len = libc::strlen(self.ptr) as uint;
+        f(self.ptr, len)
+    }
 }
 
 impl ToCStr for CString {
@@ -651,6 +720,14 @@ impl ToCStr for CString {
 
     unsafe fn with_c_str_unchecked<T>(&self, f: |*const libc::c_char| -> T) -> T {
         self.buf.with_c_str_unchecked(f)
+    }
+
+    fn with_c_str_len<T>(&self, f: |*const libc::c_char, uint| -> T) -> T {
+        f(self.buf.ptr, self.len)
+    }
+
+    unsafe fn with_c_str_len_unchecked<T>(&self, f: |*const libc::c_char, uint| -> T) -> T {
+        f(self.buf.ptr, self.len)
     }
 }
 
@@ -996,6 +1073,12 @@ mod bench {
         }
     }
 
+    #[inline]
+    fn check_len(s: &str, c_str: *const libc::c_char, len: uint) {
+        assert_eq!(s.len(), len);
+        check(s, c_str);
+    }
+
     static S_SHORT: &'static str = "Mary";
     static S_MEDIUM: &'static str = "Mary had a little lamb";
     static S_LONG: &'static str = "\
@@ -1092,5 +1175,49 @@ mod bench {
     #[bench]
     fn bench_with_c_str_unchecked_long(b: &mut Bencher) {
         bench_with_c_str_unchecked(b, S_LONG)
+    }
+
+    fn bench_with_c_str_len(b: &mut Bencher, s: &str) {
+        b.iter(|| {
+            s.with_c_str_len(|c_str_buf, len| check_len(s, c_str_buf, len))
+        })
+    }
+
+    #[bench]
+    fn bench_with_c_str_len_short(b: &mut Bencher) {
+        bench_with_c_str_len(b, S_SHORT)
+    }
+
+    #[bench]
+    fn bench_with_c_str_len_medium(b: &mut Bencher) {
+        bench_with_c_str_len(b, S_MEDIUM)
+    }
+
+    #[bench]
+    fn bench_with_c_str_len_long(b: &mut Bencher) {
+        bench_with_c_str_len(b, S_LONG)
+    }
+
+    fn bench_with_c_str_len_unchecked(b: &mut Bencher, s: &str) {
+        b.iter(|| {
+            unsafe {
+                s.with_c_str_len_unchecked(|c_str_buf, len| check_len(s, c_str_buf, len))
+            }
+        })
+    }
+
+    #[bench]
+    fn bench_with_c_str_len_unchecked_short(b: &mut Bencher) {
+        bench_with_c_str_len_unchecked(b, S_SHORT)
+    }
+
+    #[bench]
+    fn bench_with_c_str_len_unchecked_medium(b: &mut Bencher) {
+        bench_with_c_str_len_unchecked(b, S_MEDIUM)
+    }
+
+    #[bench]
+    fn bench_with_c_str_len_unchecked_long(b: &mut Bencher) {
+        bench_with_c_str_len_unchecked(b, S_LONG)
     }
 }
