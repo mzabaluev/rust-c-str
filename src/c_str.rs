@@ -72,10 +72,10 @@ use std::fmt;
 use std::hash;
 use std::kinds::{Send,Sized,marker};
 use std::mem;
-use std::prelude::{Drop, Eq, ImmutablePartialEqSlice};
-use std::prelude::{ImmutableSlice, Iterator};
+use std::prelude::{Drop, Eq, Iterator};
 use std::prelude::{None, Option, Ord, Ordering, PartialEq};
-use std::prelude::{PartialOrd, RawPtr, Some, StrSlice, Vec};
+use std::prelude::{PartialEqSlicePrelude, PartialOrd, RawPtr, Some};
+use std::prelude::{SlicePrelude, StrPrelude, Vec};
 use std::ptr;
 use std::raw::Slice;
 use std::slice;
@@ -136,21 +136,21 @@ impl Eq for CStrBuf {}
 impl PartialEq for CString {
     #[inline]
     fn eq(&self, other: &CString) -> bool {
-        self.as_bytes().eq(&other.as_bytes())
+        self.as_bytes().eq(other.as_bytes())
     }
 }
 
 impl PartialOrd for CString {
     #[inline]
     fn partial_cmp(&self, other: &CString) -> Option<Ordering> {
-        self.as_bytes().partial_cmp(&other.as_bytes())
+        self.as_bytes().partial_cmp(other.as_bytes())
     }
 }
 
 impl Ord for CString {
     #[inline]
     fn cmp(&self, other: &CString) -> Ordering {
-        self.as_bytes().cmp(&other.as_bytes())
+        self.as_bytes().cmp(other.as_bytes())
     }
 }
 
@@ -711,11 +711,10 @@ mod tests {
     use std::option::{None,Some};
     use std::ptr;
     use std::ptr::RawPtr;
-    use std::slice::ImmutableSlice;
-    use std::str::StrSlice;
+    use std::slice::{CloneSliceAllocPrelude,SlicePrelude};
+    use std::str::StrPrelude;
     use std::string::String;
     use std::task;
-    use std::slice::CloneableVector;
     use libc;
 
     use super::{CStrBuf,CString,ToCStr};
@@ -981,7 +980,7 @@ mod bench {
     use libc;
     use std::iter::range;
     use std::ptr::RawPtr;
-    use std::str::StrSlice;
+    use std::str::StrPrelude;
 
     use super::ToCStr;
 
