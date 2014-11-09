@@ -89,7 +89,7 @@ const NUL: u8 = 0;
 
 /// A low-level representation of a C String.
 ///
-/// This structure wraps a raw pointer to a NUL-terminated C string,
+/// This structure wraps a raw pointer to a null-terminated C string,
 /// and will optionally invoke a destructor closure when it goes
 /// out of scope.
 ///
@@ -379,7 +379,7 @@ impl CString {
         self.buf.owns_buffer()
     }
 
-    /// Converts the `CString` into a `&[u8]` without copying.
+    /// Converts the `CString` into a byte slice without copying.
     /// Includes the terminating NUL byte.
     pub fn as_bytes<'a>(&'a self) -> &'a [u8] {
         unsafe {
@@ -387,7 +387,7 @@ impl CString {
         }
     }
 
-    /// Converts the `CString` into a `&[u8]` without copying.
+    /// Converts the `CString` into a byte slice without copying.
     /// Does not include the terminating NUL byte.
     pub fn as_bytes_no_nul<'a>(&'a self) -> &'a [u8] {
         unsafe {
@@ -395,7 +395,7 @@ impl CString {
         }
     }
 
-    /// Converts the `CString` into a `&str` without copying.
+    /// Converts the `CString` into a string slice without copying.
     /// Returns `None` if the string is not UTF-8.
     #[inline]
     pub fn as_str<'a>(&'a self) -> Option<&'a str> {
@@ -408,7 +408,7 @@ impl CString {
         self.buf.iter()
     }
 
-    /// Unwraps the wrapped `*libc::c_char` from the `CString` wrapper
+    /// Unwraps the raw character pointer from the `CString`
     /// without running the destructor. If the string was allocated,
     /// a user of `.unwrap()` should ensure the allocation is eventually
     /// freed.
