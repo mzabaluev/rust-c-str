@@ -180,7 +180,6 @@ impl CStrBuf {
     unsafe fn new_internal(ptr: *const libc::c_char,
                            maybe_dtor: Option<proc(*mut libc::c_char):Send>)
                           -> CStrBuf {
-        assert!(!ptr.is_null());
         CStrBuf { ptr: ptr, dtor: maybe_dtor }
     }
 
@@ -191,6 +190,7 @@ impl CStrBuf {
     ///
     /// Fails if `ptr` is null.
     pub unsafe fn new_unowned(ptr: *const libc::c_char) -> CStrBuf {
+        assert!(!ptr.is_null());
         CStrBuf::new_internal(ptr, None)
     }
 
@@ -214,6 +214,7 @@ impl CStrBuf {
     pub unsafe fn new_with_dtor(ptr: *mut libc::c_char,
                                 dtor: proc(*mut libc::c_char):Send)
                                -> CStrBuf {
+        assert!(!ptr.is_null());
         CStrBuf::new_internal(ptr as *const libc::c_char, Some(dtor))
     }
 
@@ -295,7 +296,6 @@ impl CString {
                            len: uint,
                            maybe_dtor: Option<proc(*mut libc::c_char):Send>)
                           -> CString {
-        assert!(!ptr.is_null());
         assert!(*ptr.offset(len as int) == (NUL as libc::c_char));
         CString { buf: CStrBuf::new_internal(ptr, maybe_dtor), len: len }
     }
@@ -308,6 +308,7 @@ impl CString {
     ///
     /// Fails if `ptr` is null, or if the byte at `len` is not NUL.
     pub unsafe fn new_unowned(ptr: *const libc::c_char, len: uint) -> CString {
+        assert!(!ptr.is_null());
         CString::new_internal(ptr, len, None)
     }
 
@@ -334,6 +335,7 @@ impl CString {
                                 len: uint,
                                 dtor: proc(*mut libc::c_char):Send)
                                -> CString {
+        assert!(!ptr.is_null());
         CString::new_internal(ptr as *const libc::c_char, len, Some(dtor))
     }
 
