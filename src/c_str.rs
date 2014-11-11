@@ -856,6 +856,14 @@ pub struct CChars<'a> {
     marker: marker::ContravariantLifetime<'a>,
 }
 
+impl<'a> CChars<'a> {
+    /// Converts the iterator into a `CStrRef` by calculating the length
+    /// of the remaining string.
+    pub fn with_len(&self) -> CStrRef<'a> {
+        unsafe { CStrRef::wrap(self.ptr) }
+    }
+}
+
 impl<'a> Iterator<libc::c_char> for CChars<'a> {
     fn next(&mut self) -> Option<libc::c_char> {
         let ch = unsafe { *self.ptr };
@@ -1133,6 +1141,23 @@ mod tests {
         assert_eq!(iter.next(), Some('l' as libc::c_char));
         assert_eq!(iter.next(), Some('o' as libc::c_char));
         assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn test_chars_with_len() {
+        let c_str = "hello".to_c_str();
+        let mut iter = c_str.iter();
+        iter.next();
+        let c_ref = iter.with_len();
+        assert_eq!(c_ref.len(), 4);
+        let buf = c_ref.as_ptr();
+        unsafe {
+            assert_eq!(*buf.offset(0), 'e' as libc::c_char);
+            assert_eq!(*buf.offset(1), 'l' as libc::c_char);
+            assert_eq!(*buf.offset(2), 'l' as libc::c_char);
+            assert_eq!(*buf.offset(3), 'o' as libc::c_char);
+            assert_eq!(*buf.offset(4), 0);
+        }
     }
 
     #[test]
