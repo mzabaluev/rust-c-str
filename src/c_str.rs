@@ -232,7 +232,7 @@ impl CStrBuf {
 
     /// Converts the `CStrBuf` into a temporary `CStrRef`, calculating
     /// the length of the string.
-    pub fn with_len<'a>(&'a self) -> CStrRef<'a> {
+    pub fn measure<'a>(&'a self) -> CStrRef<'a> {
         unsafe { CStrRef::wrap(self.ptr) }
     }
 
@@ -859,7 +859,7 @@ pub struct CChars<'a> {
 impl<'a> CChars<'a> {
     /// Converts the iterator into a `CStrRef` by calculating the length
     /// of the remaining string.
-    pub fn with_len(&self) -> CStrRef<'a> {
+    pub fn measure(&self) -> CStrRef<'a> {
         unsafe { CStrRef::wrap(self.ptr) }
     }
 }
@@ -1059,13 +1059,13 @@ mod tests {
     #[test]
     fn test_c_ref_to_c_str() {
         let c_buf = c_buf_from_bytes(b"");
-        let c_str = c_buf.with_len().to_c_str();
+        let c_str = c_buf.measure().to_c_str();
         unsafe {
             assert_eq!(*c_str.as_ptr().offset(0), 0);
         }
 
         let c_buf = c_buf_from_bytes(b"hello");
-        let c_str = c_buf.with_len().to_c_str();
+        let c_str = c_buf.measure().to_c_str();
         let buf = c_str.as_ptr();
         unsafe {
             assert_eq!(*buf.offset(0), 'h' as libc::c_char);
@@ -1077,7 +1077,7 @@ mod tests {
         }
 
         let c_buf = c_buf_from_bytes(b"foo\xFF");
-        let c_str = c_buf.with_len().to_c_str();
+        let c_str = c_buf.measure().to_c_str();
         let buf = c_str.as_ptr();
         unsafe {
             assert_eq!(*buf.offset(0), 'f' as libc::c_char);
@@ -1104,7 +1104,7 @@ mod tests {
     #[test]
     fn test_ref_as_ptr() {
         let c_buf = c_buf_from_bytes(b"hello");
-        let c_ref = c_buf.with_len();
+        let c_ref = c_buf.measure();
         let len = unsafe { libc::strlen(c_ref.as_ptr()) };
         assert_eq!(len, 5);
     }
@@ -1128,12 +1128,12 @@ mod tests {
     #[test]
     fn test_ref_iterator() {
         let c_buf = c_buf_from_bytes(b"");
-        let c_ref = c_buf.with_len();
+        let c_ref = c_buf.measure();
         let mut iter = c_ref.iter();
         assert_eq!(iter.next(), None);
 
         let c_buf = c_buf_from_bytes(b"hello");
-        let c_ref = c_buf.with_len();
+        let c_ref = c_buf.measure();
         let mut iter = c_ref.iter();
         assert_eq!(iter.next(), Some('h' as libc::c_char));
         assert_eq!(iter.next(), Some('e' as libc::c_char));
@@ -1144,11 +1144,11 @@ mod tests {
     }
 
     #[test]
-    fn test_chars_with_len() {
+    fn test_chars_measure() {
         let c_str = "hello".to_c_str();
         let mut iter = c_str.iter();
         iter.next();
-        let c_ref = iter.with_len();
+        let c_ref = iter.measure();
         assert_eq!(c_ref.len(), 4);
         let buf = c_ref.as_ptr();
         unsafe {
@@ -1214,40 +1214,40 @@ mod tests {
     #[test]
     fn test_ref_as_bytes() {
         let c_buf = c_buf_from_bytes(b"hello");
-        let c_ref = c_buf.with_len();
+        let c_ref = c_buf.measure();
         assert_eq!(c_ref.as_bytes(), b"hello\0");
         let c_buf = c_buf_from_bytes(b"");
-        let c_ref = c_buf.with_len();
+        let c_ref = c_buf.measure();
         assert_eq!(c_ref.as_bytes(), b"\0");
         let c_buf = c_buf_from_bytes(b"foo\xFF");
-        let c_ref = c_buf.with_len();
+        let c_ref = c_buf.measure();
         assert_eq!(c_ref.as_bytes(), b"foo\xFF\0");
     }
 
     #[test]
     fn test_ref_as_bytes_no_nul() {
         let c_buf = c_buf_from_bytes(b"hello");
-        let c_ref = c_buf.with_len();
+        let c_ref = c_buf.measure();
         assert_eq!(c_ref.as_bytes_no_nul(), b"hello");
         let c_buf = c_buf_from_bytes(b"");
-        let c_ref = c_buf.with_len();
+        let c_ref = c_buf.measure();
         let exp: &[u8] = [];
         assert_eq!(c_ref.as_bytes_no_nul(), exp);
         let c_buf = c_buf_from_bytes(b"foo\xFF");
-        let c_ref = c_buf.with_len();
+        let c_ref = c_buf.measure();
         assert_eq!(c_ref.as_bytes_no_nul(), b"foo\xFF");
     }
 
     #[test]
     fn test_ref_as_str() {
         let c_buf = c_buf_from_bytes(b"hello");
-        let c_ref = c_buf.with_len();
+        let c_ref = c_buf.measure();
         assert_eq!(c_ref.as_str(), Some("hello"));
         let c_buf = c_buf_from_bytes(b"");
-        let c_ref = c_buf.with_len();
+        let c_ref = c_buf.measure();
         assert_eq!(c_ref.as_str(), Some(""));
         let c_buf = c_buf_from_bytes(b"foo\xFF");
-        let c_ref = c_buf.with_len();
+        let c_ref = c_buf.measure();
         assert_eq!(c_ref.as_str(), None);
     }
 
