@@ -741,7 +741,7 @@ unsafe fn with_c_str_len<T>(v: &[u8], checked: bool,
             assert!(!v.contains(&NUL));
         }
         let mut buf: [u8, .. BUF_LEN] = mem::uninitialized();
-        slice::bytes::copy_memory(buf, v);
+        slice::bytes::copy_memory(&mut buf, v);
         buf[len] = 0;
 
         return f(buf.as_ptr() as *const libc::c_char, len)
@@ -964,7 +964,7 @@ mod tests {
 
     #[test]
     fn test_vec_to_c_str() {
-        let b: &[u8] = [];
+        let b: &[u8] = &[];
         let c_str = b.to_c_str();
         unsafe {
             assert_eq!(*c_str.as_ptr().offset(0), 0);
@@ -1195,7 +1195,7 @@ mod tests {
         let c_str = "hello".to_c_str();
         assert_eq!(c_str.as_bytes_no_nul(), b"hello");
         let c_str = "".to_c_str();
-        let exp: &[u8] = [];
+        let exp: &[u8] = &[];
         assert_eq!(c_str.as_bytes_no_nul(), exp);
         let c_str = b"foo\xFF".to_c_str();
         assert_eq!(c_str.as_bytes_no_nul(), b"foo\xFF");
@@ -1231,7 +1231,7 @@ mod tests {
         assert_eq!(c_ref.as_bytes_no_nul(), b"hello");
         let c_buf = c_buf_from_bytes(b"");
         let c_ref = c_buf.measure();
-        let exp: &[u8] = [];
+        let exp: &[u8] = &[];
         assert_eq!(c_ref.as_bytes_no_nul(), exp);
         let c_buf = c_buf_from_bytes(b"foo\xFF");
         let c_ref = c_buf.measure();
