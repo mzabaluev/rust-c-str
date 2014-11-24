@@ -198,9 +198,9 @@ impl CStrBuf {
     /// Create a `CStrBuf` from a pointer. The returned `CStrBuf` will not
     /// deallocate the string when dropped.
     ///
-    ///# Failure
+    ///# Panics
     ///
-    /// Fails if `ptr` is null.
+    /// Panics if `ptr` is null.
     pub unsafe fn new_unowned(ptr: *const libc::c_char) -> CStrBuf {
         assert!(!ptr.is_null());
         CStrBuf::new_internal(ptr, None)
@@ -210,9 +210,9 @@ impl CStrBuf {
     /// deallocate the string with the standard C function `free()`
     /// when dropped.
     ///
-    ///# Failure
+    ///# Panics
     ///
-    /// Fails if `ptr` is null.
+    /// Panics if `ptr` is null.
     pub unsafe fn new_libc(ptr: *mut libc::c_char) -> CStrBuf {
         CStrBuf::new_with_dtor(ptr, libc_free)
     }
@@ -220,9 +220,9 @@ impl CStrBuf {
     /// Create a `CStrBuf` from a foreign pointer and a closure to run
     /// upon destruction.
     ///
-    ///# Failure
+    ///# Panics
     ///
-    /// Fails if `ptr` is null.
+    /// Panics if `ptr` is null.
     pub unsafe fn new_with_dtor(ptr: *mut libc::c_char,
                                 dtor: proc(*mut libc::c_char):Send)
                                -> CStrBuf {
@@ -322,9 +322,9 @@ impl CString {
     /// (not including the terminating NUL).
     /// The returned `CString` will not deallocate the string when dropped.
     ///
-    ///# Failure
+    ///# Panics
     ///
-    /// Fails if `ptr` is null, or if the byte at `len` is not NUL.
+    /// Panics if `ptr` is null, or if the byte at `len` is not NUL.
     pub unsafe fn new_unowned(ptr: *const libc::c_char, len: uint) -> CString {
         assert!(!ptr.is_null());
         CString::new_internal(ptr, len, None)
@@ -335,9 +335,9 @@ impl CString {
     /// The returned `CString` will deallocate the string with the standard
     /// C function `free()` when dropped.
     ///
-    ///# Failure
+    ///# Panics
     ///
-    /// Fails if `ptr` is null, or if the byte at `len` is not NUL.
+    /// Panics if `ptr` is null, or if the byte at `len` is not NUL.
     pub unsafe fn new_libc(ptr: *mut libc::c_char, len: uint) -> CString {
         CString::new_with_dtor(ptr, len, libc_free)
     }
@@ -346,9 +346,9 @@ impl CString {
     /// (not including the terminating NUL), and a closure to run upon
     /// destruction.
     ///
-    ///# Failure
+    ///# Panics
     ///
-    /// Fails if `ptr` is null, or if the byte at `len` is not NUL.
+    /// Panics if `ptr` is null, or if the byte at `len` is not NUL.
     pub unsafe fn new_with_dtor(ptr: *mut libc::c_char,
                                 len: uint,
                                 dtor: proc(*mut libc::c_char):Send)
@@ -453,9 +453,9 @@ impl<'a> CStrRef<'a> {
     /// `CStrRef` value. The pointer should be valid for the lifetime which
     /// is the type parameter of the `CStrRef`.
     ///
-    ///# Failure
+    ///# Panics
     ///
-    /// Fails if `ptr` is null.
+    /// Panics if `ptr` is null.
     pub unsafe fn wrap(ptr: *const libc::c_char) -> CStrRef<'a> {
         assert!(!ptr.is_null());
         CStrRef {
@@ -534,9 +534,9 @@ pub trait ToCStr for Sized? {
     /// The caller should not make any assumptions about the way the
     /// resulting string is allocated.
     ///
-    /// # Failure
+    /// # Panics
     ///
-    /// Fails the task if the receiver has an interior null.
+    /// Panics the task if the receiver has an interior null.
     fn to_c_str(&self) -> CString;
 
     /// Unsafe variant of `to_c_str()` that doesn't check for nulls.
@@ -560,9 +560,9 @@ pub trait ToCStr for Sized? {
     /// }
     /// ```
     ///
-    /// # Failure
+    /// # Panics
     ///
-    /// Fails the task if the receiver has an interior null.
+    /// Panics the task if the receiver has an interior null.
     #[inline]
     fn with_c_str<T>(&self, f: |*const libc::c_char| -> T) -> T {
         let c_str = self.to_c_str();
