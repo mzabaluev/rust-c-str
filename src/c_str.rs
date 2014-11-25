@@ -294,12 +294,12 @@ impl CStrBuf {
 
     /// Unwraps the wrapped `*libc::c_char` from the `CStrBuf` wrapper
     /// without running the destructor. If the string was allocated,
-    /// a user of `.unwrap()` should ensure the allocation is eventually
+    /// a user of `.into_inner()` should ensure the allocation is eventually
     /// freed.
     ///
     /// Prefer `.as_ptr()` when just retrieving a pointer to the
     /// string data, as that does not relinquish ownership.
-    pub unsafe fn unwrap(mut self) -> *const libc::c_char {
+    pub unsafe fn into_inner(mut self) -> *const libc::c_char {
         self.dtor = None;
         self.ptr
     }
@@ -438,13 +438,13 @@ impl CString {
 
     /// Unwraps the raw character pointer from the `CString`
     /// without running the destructor. If the string was allocated,
-    /// a user of `.unwrap()` should ensure the allocation is eventually
+    /// a user of `.into_inner()` should ensure the allocation is eventually
     /// freed.
     ///
     /// Prefer `.as_ptr()` when just retrieving a pointer to the
     /// string data, as that does not relinquish ownership.
-    pub unsafe fn unwrap(self) -> *const libc::c_char {
-        self.buf.unwrap()
+    pub unsafe fn into_inner(self) -> *const libc::c_char {
+        self.buf.into_inner()
     }
 
     /// Return the number of bytes in the CString
@@ -1094,9 +1094,9 @@ mod tests {
     }
 
     #[test]
-    fn test_unwrap() {
+    fn test_into_inner() {
         let c_str = "hello".to_c_str();
-        unsafe { libc::free(c_str.unwrap() as *mut libc::c_void) }
+        unsafe { libc::free(c_str.into_inner() as *mut libc::c_void) }
     }
 
     #[test]
