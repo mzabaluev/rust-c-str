@@ -111,13 +111,13 @@ pub struct CString {
     len: uint
 }
 
-/// A length-aware temporary reference to a C string.
+/// A length-aware representation of a borrowed C string value.
 ///
 /// Wraps a raw pointer to a null-terminated C string together with
 /// calculated length of the string, to provide static lifetime checking
-/// over the string buffer and zero-copy conversions to standard Rust slice
-/// types.
-pub struct CStrRef<'a> {
+/// over the string buffer and constant-time, zero-copy conversions
+/// to standard Rust slice types.
+pub struct BorrowedCString<'a> {
     ptr: *const libc::c_char,
     len: uint,
     marker: marker::ContravariantLifetime<'a>,
@@ -230,10 +230,10 @@ impl CStrBuf {
         CStrBuf::new_internal(ptr as *const libc::c_char, Some(dtor))
     }
 
-    /// Converts the `CStrBuf` into a temporary `CStrRef`, calculating
-    /// the length of the string.
-    pub fn measure<'a>(&'a self) -> CStrRef<'a> {
-        unsafe { CStrRef::wrap(self.ptr) }
+    /// Immutably borrows the string for a temporary `BorrowedCString`,
+    /// calculating the length of the string.
+    pub fn borrow_with_len<'a>(&'a self) -> BorrowedCString<'a> {
+        unsafe { BorrowedCString::wrap(self.ptr) }
     }
 
     /// Promote the `CStrBuf` into `CString` by calculating the string's
@@ -357,6 +357,14 @@ impl CString {
         CString::new_internal(ptr as *const libc::c_char, len, Some(dtor))
     }
 
+    pub fn borrow<'a>(&'a self) -> BorrowedCString<'a> {
+        BorrowedCString {
+            ptr: self.buf.ptr,
+            len: self.len,
+            marker: marker::ContravariantLifetime
+        }
+    }
+
     /// Return a pointer to the NUL-terminated string data.
     ///
     /// `.as_ptr` returns an internal pointer into the `CString`, and
@@ -447,18 +455,18 @@ impl CString {
     pub fn is_empty(&self) -> bool { self.len == 0 }
 }
 
-impl<'a> CStrRef<'a> {
+impl<'a> BorrowedCString<'a> {
 
     /// Wraps a raw pointer to a null-terminated string into a
-    /// `CStrRef` value. The pointer should be valid for the lifetime which
-    /// is the type parameter of the `CStrRef`.
+    /// `BorrowedCString` value. The pointer should be valid for the
+    /// lifetime that is the type parameter of the `BorrowedCString`.
     ///
     ///# Panics
     ///
     /// Panics if `ptr` is null.
-    pub unsafe fn wrap(ptr: *const libc::c_char) -> CStrRef<'a> {
+    pub unsafe fn wrap(ptr: *const libc::c_char) -> BorrowedCString<'a> {
         assert!(!ptr.is_null());
-        CStrRef {
+        BorrowedCString {
             ptr: ptr,
             len: libc::strlen(ptr) as uint,
             marker: marker::ContravariantLifetime
@@ -467,13 +475,13 @@ impl<'a> CStrRef<'a> {
 
     /// Return a pointer to the NUL-terminated string data.
     ///
-    /// The pointer may be invalidated when the lifetime which is the
-    /// type parameter of the `CStrRef` ends.
+    /// The pointer may be invalidated when the `BorrowedCString` falls
+    /// out of scope.
     pub fn as_ptr(&self) -> *const libc::c_char {
         self.ptr
     }
 
-    /// Converts the `CStrRef` into a byte slice without copying.
+    /// Converts the `BorrowedCString` into a byte slice without copying.
     /// Includes the terminating NUL byte.
     pub fn as_bytes(&self) -> &'a [u8] {
         unsafe {
@@ -481,7 +489,7 @@ impl<'a> CStrRef<'a> {
         }
     }
 
-    /// Converts the `CStrRef` into a byte slice without copying.
+    /// Converts the `BorrowedCString` into a byte slice without copying.
     /// Does not include the terminating NUL byte.
     pub fn as_bytes_no_nul(&self) -> &'a [u8] {
         unsafe {
@@ -489,7 +497,7 @@ impl<'a> CStrRef<'a> {
         }
     }
 
-    /// Converts the `CStrRef` into a string slice without copying.
+    /// Converts the `BorrowedCString` into a string slice without copying.
     /// Returns `None` if the string is not UTF-8.
     #[inline]
     pub fn as_str(&self) -> Option<&'a str> {
@@ -817,7 +825,7 @@ impl ToCStr for CString {
     }
 }
 
-impl<'a> ToCStr for CStrRef<'a> {
+impl<'a> ToCStr for BorrowedCString<'a> {
 
     #[inline]
     fn to_c_str(&self) -> CString {
@@ -857,10 +865,10 @@ pub struct CChars<'a> {
 }
 
 impl<'a> CChars<'a> {
-    /// Converts the iterator into a `CStrRef` by calculating the length
-    /// of the remaining string.
-    pub fn measure(&self) -> CStrRef<'a> {
-        unsafe { CStrRef::wrap(self.ptr) }
+    /// Converts the iterator into a `BorrowedCString` by calculating
+    /// the length of the remaining string.
+    pub fn remaining_c_str(&self) -> BorrowedCString<'a> {
+        unsafe { BorrowedCString::wrap(self.ptr) }
     }
 }
 
@@ -876,9 +884,6 @@ impl<'a> Iterator<libc::c_char> for CChars<'a> {
     }
 }
 
-// FIXME: need higher-ranked trait bounds (RFC 0387) to pass a CStrRef
-// to the closure instead of a CString.
-
 /// Parses a C "multistring", eg windows env values or
 /// the req->ptr result in a uv_fs_readdir() call.
 ///
@@ -889,7 +894,7 @@ impl<'a> Iterator<libc::c_char> for CChars<'a> {
 /// is found, and the number of strings found is returned.
 pub unsafe fn from_c_multistring(buf: *const libc::c_char,
                                  count: Option<uint>,
-                                 f: |&CString|) -> uint {
+                                 f: for<'a> |BorrowedCString<'a>|) -> uint {
 
     let mut curr_ptr = buf;
     let mut ctr = 0;
@@ -900,7 +905,7 @@ pub unsafe fn from_c_multistring(buf: *const libc::c_char,
     while (!limited_count || ctr < limit)
           && *curr_ptr != 0 {
         let cstr = CStrBuf::new_unowned(curr_ptr).into_c_str();
-        f(&cstr);
+        f(cstr.borrow());
         curr_ptr = curr_ptr.offset(cstr.len() as int + 1);
         ctr += 1;
     }
@@ -919,7 +924,7 @@ mod tests {
     use std::task;
     use libc;
 
-    use super::{CStrBuf,CString,CStrRef,ToCStr};
+    use super::{CStrBuf,CString,BorrowedCString,ToCStr};
     use super::from_c_multistring;
     use super::buf_dup;
 
@@ -1059,13 +1064,13 @@ mod tests {
     #[test]
     fn test_c_ref_to_c_str() {
         let c_buf = c_buf_from_bytes(b"");
-        let c_str = c_buf.measure().to_c_str();
+        let c_str = c_buf.borrow_with_len().to_c_str();
         unsafe {
             assert_eq!(*c_str.as_ptr().offset(0), 0);
         }
 
         let c_buf = c_buf_from_bytes(b"hello");
-        let c_str = c_buf.measure().to_c_str();
+        let c_str = c_buf.borrow_with_len().to_c_str();
         let buf = c_str.as_ptr();
         unsafe {
             assert_eq!(*buf.offset(0), 'h' as libc::c_char);
@@ -1077,7 +1082,7 @@ mod tests {
         }
 
         let c_buf = c_buf_from_bytes(b"foo\xFF");
-        let c_str = c_buf.measure().to_c_str();
+        let c_str = c_buf.borrow_with_len().to_c_str();
         let buf = c_str.as_ptr();
         unsafe {
             assert_eq!(*buf.offset(0), 'f' as libc::c_char);
@@ -1104,7 +1109,7 @@ mod tests {
     #[test]
     fn test_ref_as_ptr() {
         let c_buf = c_buf_from_bytes(b"hello");
-        let c_ref = c_buf.measure();
+        let c_ref = c_buf.borrow_with_len();
         let len = unsafe { libc::strlen(c_ref.as_ptr()) };
         assert_eq!(len, 5);
     }
@@ -1128,12 +1133,12 @@ mod tests {
     #[test]
     fn test_ref_iterator() {
         let c_buf = c_buf_from_bytes(b"");
-        let c_ref = c_buf.measure();
+        let c_ref = c_buf.borrow_with_len();
         let mut iter = c_ref.iter();
         assert_eq!(iter.next(), None);
 
         let c_buf = c_buf_from_bytes(b"hello");
-        let c_ref = c_buf.measure();
+        let c_ref = c_buf.borrow_with_len();
         let mut iter = c_ref.iter();
         assert_eq!(iter.next(), Some('h' as libc::c_char));
         assert_eq!(iter.next(), Some('e' as libc::c_char));
@@ -1144,11 +1149,11 @@ mod tests {
     }
 
     #[test]
-    fn test_chars_measure() {
+    fn test_chars_remaining_c_str() {
         let c_str = "hello".to_c_str();
         let mut iter = c_str.iter();
         iter.next();
-        let c_ref = iter.measure();
+        let c_ref = iter.remaining_c_str();
         assert_eq!(c_ref.len(), 4);
         let buf = c_ref.as_ptr();
         unsafe {
@@ -1214,40 +1219,40 @@ mod tests {
     #[test]
     fn test_ref_as_bytes() {
         let c_buf = c_buf_from_bytes(b"hello");
-        let c_ref = c_buf.measure();
+        let c_ref = c_buf.borrow_with_len();
         assert_eq!(c_ref.as_bytes(), b"hello\0");
         let c_buf = c_buf_from_bytes(b"");
-        let c_ref = c_buf.measure();
+        let c_ref = c_buf.borrow_with_len();
         assert_eq!(c_ref.as_bytes(), b"\0");
         let c_buf = c_buf_from_bytes(b"foo\xFF");
-        let c_ref = c_buf.measure();
+        let c_ref = c_buf.borrow_with_len();
         assert_eq!(c_ref.as_bytes(), b"foo\xFF\0");
     }
 
     #[test]
     fn test_ref_as_bytes_no_nul() {
         let c_buf = c_buf_from_bytes(b"hello");
-        let c_ref = c_buf.measure();
+        let c_ref = c_buf.borrow_with_len();
         assert_eq!(c_ref.as_bytes_no_nul(), b"hello");
         let c_buf = c_buf_from_bytes(b"");
-        let c_ref = c_buf.measure();
+        let c_ref = c_buf.borrow_with_len();
         let exp: &[u8] = &[];
         assert_eq!(c_ref.as_bytes_no_nul(), exp);
         let c_buf = c_buf_from_bytes(b"foo\xFF");
-        let c_ref = c_buf.measure();
+        let c_ref = c_buf.borrow_with_len();
         assert_eq!(c_ref.as_bytes_no_nul(), b"foo\xFF");
     }
 
     #[test]
     fn test_ref_as_str() {
         let c_buf = c_buf_from_bytes(b"hello");
-        let c_ref = c_buf.measure();
+        let c_ref = c_buf.borrow_with_len();
         assert_eq!(c_ref.as_str(), Some("hello"));
         let c_buf = c_buf_from_bytes(b"");
-        let c_ref = c_buf.measure();
+        let c_ref = c_buf.borrow_with_len();
         assert_eq!(c_ref.as_str(), Some(""));
         let c_buf = c_buf_from_bytes(b"foo\xFF");
-        let c_ref = c_buf.measure();
+        let c_ref = c_buf.borrow_with_len();
         assert_eq!(c_ref.as_str(), None);
     }
 
@@ -1287,8 +1292,8 @@ mod tests {
         ptr: *const libc::c_char
     }
 
-    fn get_inner_str<'a>(c: &'a StrContainer) -> CStrRef<'a> {
-        unsafe { CStrRef::wrap(c.ptr) }
+    fn get_inner_str<'a>(c: &'a StrContainer) -> BorrowedCString<'a> {
+        unsafe { BorrowedCString::wrap(c.ptr) }
     }
 
     #[test]
