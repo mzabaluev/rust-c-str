@@ -16,8 +16,8 @@
 #![crate_type = "lib"]
 
 #![feature(default_type_params)]
+#![feature(unsafe_destructor)]
 
-extern crate alloc;
 extern crate libc;
 
 #[cfg(test)]
