@@ -179,13 +179,17 @@ impl<D> CString<D> where D: Dtor {
         }
     }
 
-    /// Scans the string as UTF-8 and, if validated, represents it as a string
-    /// slice. Returns `None` if the string is not UTF-8.
+    /// Scans the string as UTF-8 string slice.
+    ///
+    /// # Failure
+    ///
+    /// Returns `Err` if the string is not UTF-8.
     #[inline]
     pub fn parse_as_utf8<'a>(&self) -> Result<&str, str::Utf8Error> {
         str::from_utf8(self.parse_as_bytes())
     }
 
+    /// Scans the string as UTF-8 string slice without validity checks.
     #[inline]
     pub unsafe fn parse_as_utf8_unchecked<'a>(&'a self) -> &'a str {
         str::from_utf8_unchecked(self.parse_as_bytes())
