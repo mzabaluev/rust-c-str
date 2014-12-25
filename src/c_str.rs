@@ -172,9 +172,9 @@ impl<D> CString<D> where D: Dtor {
 
     /// Scans the string to get a byte slice of its contents.
     /// The returned slice does not include the terminating NUL byte.
-    pub fn parse_as_bytes<'a>(&'a self) -> &'a [u8] {
+    pub fn parse_as_bytes(&self) -> &[u8] {
         unsafe {
-            let r: &'a *const u8 = mem::transmute(&self.ptr);
+            let r = mem::copy_lifetime(self, &(self.ptr as *const u8));
             slice::from_raw_buf(r, libc::strlen(self.ptr) as uint)
         }
     }
