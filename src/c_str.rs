@@ -75,8 +75,7 @@ use libc;
 
 const NUL: u8 = 0;
 
-/// Scans a null-terminated C character string to get a byte slice of
-/// its contents.
+/// Scans a C string as a byte slice.
 ///
 /// The returned slice does not include the terminating NUL byte.
 ///
@@ -89,7 +88,7 @@ pub unsafe fn parse_as_bytes(raw: & *const libc::c_char) -> &[u8] {
     slice::from_raw_buf(r, libc::strlen(*raw) as uint)
 }
 
-/// Scans a null-terminated C character string as UTF-8 string slice.
+/// Scans a C string as UTF-8 string slice.
 ///
 /// # Failure
 ///
@@ -105,8 +104,7 @@ pub unsafe fn parse_as_utf8<'a>(raw: & *const libc::c_char)
     str::from_utf8(parse_as_bytes(raw))
 }
 
-/// Scans a null-terminated C character string as UTF-8 string slice
-/// without validity checks.
+/// Scans a C string as UTF-8 string slice without validity checks.
 ///
 /// # Panics
 ///
