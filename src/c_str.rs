@@ -681,6 +681,33 @@ mod tests {
 
     #[test]
     #[should_fail]
+    fn test_parse_null_as_bytes_fail() {
+        unsafe {
+            let p: *const libc::c_char = ptr::null();
+            let _ = super::parse_as_bytes(&p);
+        };
+    }
+
+    #[test]
+    #[should_fail]
+    fn test_parse_null_as_utf8_fail() {
+        unsafe {
+            let p: *const libc::c_char = ptr::null();
+            let _ = super::parse_as_utf8(&p);
+        };
+    }
+
+    #[test]
+    #[should_fail]
+    fn test_parse_null_as_utf8_unchecked_fail() {
+        unsafe {
+            let p: *const libc::c_char = ptr::null();
+            let _ = super::parse_as_utf8_unchecked(&p);
+        };
+    }
+
+    #[test]
+    #[should_fail]
     fn test_str_constructor_fail() {
         let _c_str = unsafe { CString::from_raw_buf(ptr::null()) };
     }
