@@ -28,9 +28,9 @@
 //! defined in this module. Values of this type "own" an internal buffer of
 //! characters and will call a destructor when the value is dropped.
 //!
-//! The type `CStrIn` is used to adapt string data from Rust for calling
+//! The type `CStrArg` is used to adapt string data from Rust for calling
 //! C functions that expect a null-terminated string. The conversion
-//! constructors of `CStrIn` and implementations of trait `IntoCStr` provide
+//! constructors of `CStrArg` and implementations of trait `IntoCStr` provide
 //! various ways to produce C strings, but the conversions can fail due to
 //! some of the limitations explained above.
 //!
@@ -40,7 +40,7 @@
 //! extern crate c_compat;
 //! extern crate libc;
 //!
-//! use c_compat::c_str::CStrIn;
+//! use c_compat::c_str::CStrArg;
 //!
 //! extern {
 //!     fn puts(s: *const libc::c_char);
@@ -51,7 +51,7 @@
 //!
 //!     // Allocate the C string with an explicit local that owns the string. The
 //!     // string will be deallocated when `my_c_string` goes out of scope.
-//!     let my_c_string = CStrIn::from_str(my_string).ok().unwrap();
+//!     let my_c_string = CStrArg::from_str(my_string).ok().unwrap();
 //!     unsafe {
 //!         puts(my_c_string.as_ptr());
 //!     }
@@ -307,53 +307,53 @@ enum CStrData {
 ///
 /// Values of this type can be obtained by conversion from Rust strings and
 /// byte slices.
-pub struct CStrIn {
+pub struct CStrArg {
     data: CStrData
 }
 
-fn vec_into_c_str(mut v: Vec<u8>) -> CStrIn {
+fn vec_into_c_str(mut v: Vec<u8>) -> CStrArg {
     v.push(NUL);
-    CStrIn { data: CStrData::Owned(v) }
+    CStrArg { data: CStrData::Owned(v) }
 }
 
-impl CStrIn {
+impl CStrArg {
 
-    /// Create a `CStrIn` by copying a byte slice.
+    /// Create a `CStrArg` by copying a byte slice.
     ///
     /// # Failure
     ///
     /// Returns `Err` the byte slice contains an interior NUL byte.
-    pub fn from_bytes(s: &[u8]) -> Result<CStrIn, CStrError> {
+    pub fn from_bytes(s: &[u8]) -> Result<CStrArg, CStrError> {
         if let Some(pos) = s.position_elem(&NUL) {
             return Err(CStrError::ContainsNul(pos));
         }
         Ok(vec_into_c_str(s.to_vec()))
     }
 
-    /// Create a `CStrIn` by copying a byte slice,
+    /// Create a `CStrArg` by copying a byte slice,
     /// without checking for interior NUL characters.
-    pub unsafe fn from_bytes_unchecked(s: &[u8]) -> CStrIn {
+    pub unsafe fn from_bytes_unchecked(s: &[u8]) -> CStrArg {
         vec_into_c_str(s.to_vec())
     }
 
-    /// Create a `CStrIn` by copying a string slice.
+    /// Create a `CStrArg` by copying a string slice.
     ///
     /// # Failure
     ///
     /// Returns `Err` if the string contains an interior NUL character.
     #[inline]
-    pub fn from_str(s: &str) -> Result<CStrIn, CStrError> {
-        CStrIn::from_bytes(s.as_bytes())
+    pub fn from_str(s: &str) -> Result<CStrArg, CStrError> {
+        CStrArg::from_bytes(s.as_bytes())
     }
 
-    /// Create a `CStrIn` by copying a string slice,
+    /// Create a `CStrArg` by copying a string slice,
     /// without checking for interior NUL characters.
     #[inline]
-    pub unsafe fn from_str_unchecked(s: &str) -> CStrIn {
-        CStrIn::from_bytes_unchecked(s.as_bytes())
+    pub unsafe fn from_str_unchecked(s: &str) -> CStrArg {
+        CStrArg::from_bytes_unchecked(s.as_bytes())
     }
 
-    /// Create a `CStrIn` wrapping a static byte array.
+    /// Create a `CStrArg` wrapping a static byte array.
     ///
     /// This constructor can be used with null-terminated byte string literals.
     /// For non-literal data, prefer `from_bytes`, since that constructor
@@ -362,13 +362,13 @@ impl CStrIn {
     /// # Panics
     ///
     /// Panics if the byte array is not null-terminated.
-    pub fn from_static_bytes(bytes: &'static [u8]) -> CStrIn {
+    pub fn from_static_bytes(bytes: &'static [u8]) -> CStrArg {
         assert!(bytes[bytes.len() - 1] == NUL,
                 "static byte string is not null-terminated: \"{}\"", bytes);
-        CStrIn { data: CStrData::Static(bytes) }
+        CStrArg { data: CStrData::Static(bytes) }
     }
 
-    /// Create a `CStrIn` wrapping a static string.
+    /// Create a `CStrArg` wrapping a static string.
     ///
     /// This constructor can be used with null-terminated string literals.
     /// For non-literal data, prefer `from_str`, since that constructor
@@ -377,16 +377,16 @@ impl CStrIn {
     /// # Panics
     ///
     /// Panics if the string is not null-terminated.
-    pub fn from_static_str(s: &'static str) -> CStrIn {
+    pub fn from_static_str(s: &'static str) -> CStrArg {
         let bytes = s.as_bytes();
         assert!(bytes[bytes.len() - 1] == NUL,
                 "static string is not null-terminated: \"{}\"", s);
-        CStrIn { data: CStrData::Static(bytes) }
+        CStrArg { data: CStrData::Static(bytes) }
     }
 
     /// Returns a raw pointer to the null-terminated C string.
     ///
-    /// The returned pointer is internal to the `CStrIn` value,
+    /// The returned pointer is internal to the `CStrArg` value,
     /// therefore it is invalidated when the value is dropped.
     pub fn as_ptr(&self) -> *const libc::c_char {
         match self.data {
@@ -402,54 +402,54 @@ impl CStrIn {
 /// and copying of the string buffer.
 pub trait IntoCStr {
 
-    /// Transforms the receiver into a `CStrIn`.
+    /// Transforms the receiver into a `CStrArg`.
     ///
     /// # Failure
     ///
     /// Returns `Err` if the receiver contains an interior NUL byte.
-    fn into_c_str(self) -> Result<CStrIn, CStrError>;
+    fn into_c_str(self) -> Result<CStrArg, CStrError>;
 
-    /// Transforms the receiver into a `CStrIn`
+    /// Transforms the receiver into a `CStrArg`
     /// without checking for interior NUL bytes.
-    unsafe fn into_c_str_unchecked(self) -> CStrIn;
+    unsafe fn into_c_str_unchecked(self) -> CStrArg;
 }
 
 impl<'a> IntoCStr for &'a [u8] {
 
     #[inline]
-    fn into_c_str(self) -> Result<CStrIn, CStrError> {
-        CStrIn::from_bytes(self)
+    fn into_c_str(self) -> Result<CStrArg, CStrError> {
+        CStrArg::from_bytes(self)
     }
 
     #[inline]
-    unsafe fn into_c_str_unchecked(self) -> CStrIn {
-        CStrIn::from_bytes_unchecked(self)
+    unsafe fn into_c_str_unchecked(self) -> CStrArg {
+        CStrArg::from_bytes_unchecked(self)
     }
 }
 
 impl<'a> IntoCStr for &'a str {
 
     #[inline]
-    fn into_c_str(self) -> Result<CStrIn, CStrError> {
-        CStrIn::from_str(self)
+    fn into_c_str(self) -> Result<CStrArg, CStrError> {
+        CStrArg::from_str(self)
     }
 
     #[inline]
-    unsafe fn into_c_str_unchecked(self) -> CStrIn {
-        CStrIn::from_str_unchecked(self)
+    unsafe fn into_c_str_unchecked(self) -> CStrArg {
+        CStrArg::from_str_unchecked(self)
     }
 }
 
 impl IntoCStr for Vec<u8> {
 
-    fn into_c_str(self) -> Result<CStrIn, CStrError> {
+    fn into_c_str(self) -> Result<CStrArg, CStrError> {
         if let Some(pos) = self.as_slice().position_elem(&NUL) {
             return Err(CStrError::ContainsNul(pos));
         }
         Ok(vec_into_c_str(self))
     }
 
-    unsafe fn into_c_str_unchecked(self) -> CStrIn {
+    unsafe fn into_c_str_unchecked(self) -> CStrArg {
         vec_into_c_str(self)
     }
 }
@@ -457,12 +457,12 @@ impl IntoCStr for Vec<u8> {
 impl IntoCStr for String {
 
     #[inline]
-    fn into_c_str(self) -> Result<CStrIn, CStrError> {
+    fn into_c_str(self) -> Result<CStrArg, CStrError> {
         self.into_bytes().into_c_str()
     }
 
     #[inline]
-    unsafe fn into_c_str_unchecked(self) -> CStrIn {
+    unsafe fn into_c_str_unchecked(self) -> CStrArg {
         self.into_bytes().into_c_str_unchecked()
     }
 }
@@ -534,12 +534,12 @@ pub unsafe fn from_c_multistring<F>(buf: *const libc::c_char,
 
 #[cfg(test)]
 mod testutil {
-    use super::CStrIn;
+    use super::CStrArg;
     use std::prelude::{RawPtr,SliceExt};
     use std::iter::range;
 
     #[inline]
-    pub fn check_c_str(c_str: &CStrIn, expected: &[u8]) {
+    pub fn check_c_str(c_str: &CStrArg, expected: &[u8]) {
         let buf = c_str.as_ptr();
         let len = expected.len();
         for i in range(0u, len) {
