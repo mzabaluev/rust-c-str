@@ -74,6 +74,48 @@ use libc;
 
 const NUL: u8 = 0;
 
+/// Scans a null-terminated C character string to get a byte slice of
+/// its contents.
+/// The returned slice does not include the terminating NUL byte.
+///
+/// # Panics
+///
+/// Panics if the string pointer is null.
+pub unsafe fn parse_as_bytes(raw: & *const libc::c_char) -> &[u8] {
+    assert!(raw.is_not_null());
+    let r = mem::copy_lifetime(raw, &(*raw as *const u8));
+    slice::from_raw_buf(r, libc::strlen(*raw) as uint)
+}
+
+/// Scans a null-terminated C character string as UTF-8 string slice.
+///
+/// # Failure
+///
+/// Returns `Err` if the string is not UTF-8.
+///
+/// # Panics
+///
+/// Panics if the string pointer is null.
+#[inline]
+pub unsafe fn parse_as_utf8<'a>(raw: & *const libc::c_char)
+                               -> Result<&str, str::Utf8Error>
+{
+    str::from_utf8(parse_as_bytes(raw))
+}
+
+/// Scans a null-terminated C character string as UTF-8 string slice
+/// without validity checks.
+///
+/// # Panics
+///
+/// Panics if the string pointer is null.
+#[inline]
+pub unsafe fn parse_as_utf8_unchecked(raw: & *const libc::c_char)
+                                     -> &str
+{
+    str::from_utf8_unchecked(parse_as_bytes(raw))
+}
+
 /// The representation of an allocated C String.
 ///
 /// This structure wraps a raw pointer to a null-terminated C string,
@@ -574,6 +616,42 @@ mod tests {
     #[test]
     fn test_parse_as_bytes() {
         let c_str = str_dup("hello");
+        let bytes = unsafe { super::parse_as_bytes(&c_str.ptr) };
+        assert_eq!(bytes, b"hello");
+        let c_str = str_dup("");
+        let bytes = unsafe { super::parse_as_bytes(&c_str.ptr) };
+        assert_eq!(bytes, b"");
+        let c_str = bytes_dup(b"foo\xFF");
+        let bytes = unsafe { super::parse_as_bytes(&c_str.ptr) };
+        assert_eq!(bytes, b"foo\xFF");
+    }
+
+    #[test]
+    fn test_parse_as_utf8() {
+        let c_str = str_dup("hello");
+        let res = unsafe { super::parse_as_utf8(&c_str.ptr) };
+        assert_eq!(res, Ok("hello"));
+        let c_str = str_dup("");
+        let res = unsafe { super::parse_as_utf8(&c_str.ptr) };
+        assert_eq!(res, Ok(""));
+        let c_str = bytes_dup(b"foo\xFF");
+        let res = unsafe { super::parse_as_utf8(&c_str.ptr) };
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_parse_as_utf8_unchecked() {
+        let c_str = str_dup("hello");
+        let s = unsafe { super::parse_as_utf8_unchecked(&c_str.ptr) };
+        assert_eq!(s, "hello");
+        let c_str = str_dup("");
+        let s = unsafe { super::parse_as_utf8_unchecked(&c_str.ptr) };
+        assert_eq!(s, "");
+    }
+
+    #[test]
+    fn test_c_str_parse_as_bytes() {
+        let c_str = str_dup("hello");
         assert_eq!(c_str.parse_as_bytes(), b"hello");
         let c_str = str_dup("");
         assert_eq!(c_str.parse_as_bytes(), b"");
@@ -582,7 +660,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_as_utf8() {
+    fn test_c_str_parse_as_utf8() {
         let c_str = str_dup("hello");
         assert_eq!(c_str.parse_as_utf8(), Ok("hello"));
         let c_str = str_dup("");
@@ -592,7 +670,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_as_utf8_unchecked() {
+    fn test_c_str_parse_as_utf8_unchecked() {
         let c_str = str_dup("hello");
         let s = unsafe { c_str.parse_as_utf8_unchecked() };
         assert_eq!(s, "hello");
