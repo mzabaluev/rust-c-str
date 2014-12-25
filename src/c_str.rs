@@ -126,9 +126,7 @@ impl<S, D> hash::Hash<S> for CString<D>
     where S: hash::Writer, D: Dtor
 {
     fn hash(&self, state: &mut S) {
-        let len = unsafe { libc::strlen(self.ptr) as uint };
-        let s = unsafe { slice::from_raw_buf(&self.ptr, len) };
-        state.write(unsafe { mem::transmute(s) });
+        state.write(self.parse_as_bytes());
     }
 }
 
