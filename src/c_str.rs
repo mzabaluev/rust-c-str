@@ -11,27 +11,28 @@
 
 //! C-string manipulation and management
 //!
-//! This modules provides the basic methods for creating and manipulating
-//! null-terminated strings for use with FFI calls (back to C). Most C APIs require
-//! that the string being passed to them is null-terminated, and by default rust's
-//! string types are *not* null terminated.
+//! This modules provides the basic methods for creating and managing
+//! null-terminated strings for use with FFI calls. Most C APIs require
+//! that the string being passed to them is null-terminated and many of them
+//! allocate and return null-terminated strings, but Rust's built-in string
+//! types are *not* null terminated.
 //!
 //! The other problem with translating Rust strings to C strings is that Rust
-//! strings can validly contain a null-byte in the middle of the string (0 is a
-//! valid Unicode codepoint). This means that not all Rust strings can actually be
-//! translated to C strings.
+//! strings can validly contain a NUL byte in the middle of the string (0 is a
+//! valid Unicode codepoint). This means that not all Rust strings can actually
+//! be translated to C strings.
 //!
 //! # Creation of a C string
 //!
-//! An allocated C string is managed through the type `CString` defined
-//! in this module. Values of these types "own" an internal buffer of characters
-//! and will call a destructor when the string is dropped.
+//! An allocated C string is managed through the generic type `CString`
+//! defined in this module. Values of this type "own" an internal buffer of
+//! characters and will call a destructor when the value is dropped.
 //!
 //! The type `CStrIn` is used to adapt string data from Rust for calling
-//! C functions that expect a null-terminated string. The conversion constructors
-//! of `CStrIn` and implementations of trait `IntoCStr` provide various ways to
-//! produce C strings, but the conversions can fail due to some of the limitations
-//! explained above.
+//! C functions that expect a null-terminated string. The conversion
+//! constructors of `CStrIn` and implementations of trait `IntoCStr` provide
+//! various ways to produce C strings, but the conversions can fail due to
+//! some of the limitations explained above.
 //!
 //! An example of creating and using a C string would be:
 //!
@@ -76,6 +77,7 @@ const NUL: u8 = 0;
 
 /// Scans a null-terminated C character string to get a byte slice of
 /// its contents.
+///
 /// The returned slice does not include the terminating NUL byte.
 ///
 /// # Panics
@@ -116,11 +118,10 @@ pub unsafe fn parse_as_utf8_unchecked(raw: & *const libc::c_char)
     str::from_utf8_unchecked(parse_as_bytes(raw))
 }
 
-/// The representation of an allocated C String.
+/// Representation of an allocated C String.
 ///
-/// This structure wraps a raw pointer to a null-terminated C string,
-/// and will optionally invoke a destructor closure when it goes
-/// out of scope.
+/// This structure wraps a raw pointer to a null-terminated C string
+/// and a destructor to invoke when dropped.
 pub struct CString<D> where D: Dtor {
     ptr: *const libc::c_char,
     dtor: D
@@ -172,10 +173,14 @@ impl<S, D> hash::Hash<S> for CString<D>
     }
 }
 
+/// The destructor trait for `CString`.
 pub trait Dtor {
+    /// Deallocates the string data.
     fn destroy(&mut self, data: *const libc::c_char);
 }
 
+/// A destructor for `CString` that uses `libc::free`
+/// to deallocate the string.
 #[deriving(Copy, Default)]
 pub struct LibcDtor;
 
@@ -187,9 +192,10 @@ impl Dtor for LibcDtor {
 
 impl<D> CString<D> where D: Dtor + Default {
 
-    /// Create a `CString` from a pointer. The returned `CString` will be
-    /// deallocated with a default instance of the destructor type when
-    /// the `CString` is dropped.
+    /// Create a `CString` from a pointer.
+    ///
+    /// The returned `CString` will be deallocated with a default instance
+    /// of the destructor type when the `CString` is dropped.
     ///
     ///# Panics
     ///
@@ -213,6 +219,7 @@ impl<D> CString<D> where D: Dtor {
     }
 
     /// Scans the string to get a byte slice of its contents.
+    ///
     /// The returned slice does not include the terminating NUL byte.
     pub fn parse_as_bytes(&self) -> &[u8] {
         unsafe {
@@ -270,7 +277,8 @@ enum CStrData {
     Owned(Vec<u8>)
 }
 
-/// A utility type to pass C string data to foreign functions.
+/// An adaptor type to pass C string data to foreign functions.
+///
 /// Values of this type can be obtained by conversion from Rust strings and
 /// byte slices.
 pub struct CStrIn {
@@ -285,7 +293,8 @@ fn vec_into_c_str(mut v: Vec<u8>) -> CStrIn {
 impl CStrIn {
 
     /// Create a `CStrIn` by copying a byte slice.
-    /// If the byte slice contains an inner null byte, `None` is returned.
+    ///
+    /// If the byte slice contains an interior NUL byte, `None` is returned.
     pub fn from_bytes(s: &[u8]) -> Option<CStrIn> {
         if s.contains(&NUL) {
             return None;
@@ -294,29 +303,31 @@ impl CStrIn {
     }
 
     /// Create a `CStrIn` by copying a byte slice,
-    /// without checking for inner null.
+    /// without checking for interior NUL characters.
     pub unsafe fn from_bytes_unchecked(s: &[u8]) -> CStrIn {
         vec_into_c_str(s.to_vec())
     }
 
     /// Create a `CStrIn` by copying a string slice.
-    /// If the string contains an inner null character, `None` is returned.
+    ///
+    /// If the string contains an interior NUL character, `None` is returned.
     #[inline]
     pub fn from_str(s: &str) -> Option<CStrIn> {
         CStrIn::from_bytes(s.as_bytes())
     }
 
     /// Create a `CStrIn` by copying a string slice,
-    /// without checking for inner null.
+    /// without checking for interior NUL characters.
     #[inline]
     pub unsafe fn from_str_unchecked(s: &str) -> CStrIn {
         CStrIn::from_bytes_unchecked(s.as_bytes())
     }
 
     /// Create a `CStrIn` wrapping a static byte array.
+    ///
     /// This constructor can be used with null-terminated byte string literals.
     /// For non-literal data, prefer `from_bytes`, since that constructor
-    /// checks for inner nulls.
+    /// checks for interior NUL bytes.
     ///
     /// # Panics
     ///
@@ -328,9 +339,10 @@ impl CStrIn {
     }
 
     /// Create a `CStrIn` wrapping a static string.
+    ///
     /// This constructor can be used with null-terminated string literals.
     /// For non-literal data, prefer `from_str`, since that constructor
-    /// checks for inner nulls.
+    /// checks for interior NUL characters.
     ///
     /// # Panics
     ///
@@ -343,6 +355,7 @@ impl CStrIn {
     }
 
     /// Returns a raw pointer to the null-terminated C string.
+    ///
     /// The returned pointer is internal to the `CStrIn` value,
     /// therefore it is invalidated when the value is dropped.
     pub fn as_ptr(&self) -> *const libc::c_char {
@@ -353,16 +366,19 @@ impl CStrIn {
     }
 }
 
-/// A generic trait for transforming data into C string input values.
+/// A generic trait for transforming data into C string in-parameter values.
+///
 /// Depending on the implementation, the conversion may avoid allocation
-/// and copying of the entire string buffer.
+/// and copying of the string buffer.
 pub trait IntoCStr {
 
     /// Transform the receiver into a `CStrIn`.
-    /// If the receiver contains inner null bytes, `None` is returned.
+    ///
+    /// If the receiver contains interior null bytes, `None` is returned.
     fn into_c_str(self) -> Option<CStrIn>;
 
-    /// Transform the receiver into a `CStrIn` without checking for inner null.
+    /// Transform the receiver into a `CStrIn`
+    /// without checking for interior NUL bytes.
     unsafe fn into_c_str_unchecked(self) -> CStrIn;
 }
 
@@ -457,7 +473,7 @@ impl<'a> Iterator<libc::c_char> for CChars<'a> {
 }
 
 /// Parses a C "multistring", eg windows env values or
-/// the req->ptr result in a uv_fs_readdir() call.
+/// the `req->ptr` result in a `uv_fs_readdir()` call.
 ///
 /// Optionally, a `limit` can be passed in, limiting the
 /// parsing to only being done `limit` times.
