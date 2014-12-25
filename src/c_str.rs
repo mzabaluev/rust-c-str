@@ -51,7 +51,7 @@
 //!
 //!     // Allocate the C string with an explicit local that owns the string. The
 //!     // string will be deallocated when `my_c_string` goes out of scope.
-//!     let my_c_string = CStrIn::from_str(my_string).unwrap();
+//!     let my_c_string = CStrIn::from_str(my_string).ok().unwrap();
 //!     unsafe {
 //!         puts(my_c_string.as_ptr());
 //!     }
@@ -61,16 +61,17 @@
 #![no_implicit_prelude]
 
 use std::default::Default;
+use std::error::Error;
 use std::fmt;
 use std::hash;
 use std::kinds::marker;
 use std::mem;
-use std::prelude::{AsSlice, CloneSliceExt, Drop, Eq, FnMut, Iterator};
-use std::prelude::{None, Option, Ord, Ordering, PartialEq, PartialEqSliceExt};
-use std::prelude::{PartialOrd, RawPtr, Result, SliceExt, Some, StrExt, Vec};
+use std::prelude::{AsSlice, CloneSliceExt, Drop, Eq, Err, FnMut, Iterator};
+use std::prelude::{None, Ok, Option, Ord, Ordering, PartialEq};
+use std::prelude::{PartialEqSliceExt, PartialOrd, RawPtr, Result, SliceExt};
+use std::prelude::{Some, StrExt, String, Vec};
 use std::slice;
 use std::str;
-use std::string::String;
 use libc;
 
 const NUL: u8 = 0;
@@ -270,6 +271,33 @@ impl<D> fmt::Show for CString<D> where D: Dtor {
     }
 }
 
+/// Errors which can occur when attempting to convert data to a C string.
+#[deriving(Copy)]
+pub enum CStrError {
+
+    /// The source string or a byte sequence contains a NUL byte.
+    ///
+    /// The integer gives a byte offset where the first NUL occurs.
+    ContainsNul(uint)
+}
+
+impl Error for CStrError {
+
+    fn description(&self) -> &str {
+        match *self {
+            CStrError::ContainsNul(_)
+                => "Conversion to C string from data containing a zero byte is not possible"
+        }
+    }
+
+    fn detail(&self) -> Option<String> {
+        match *self {
+            CStrError::ContainsNul(pos)
+                => Some(format!("NUL at position {}", pos))
+        }
+    }
+}
+
 enum CStrData {
     Static(&'static [u8]),
     Owned(Vec<u8>)
@@ -292,12 +320,14 @@ impl CStrIn {
 
     /// Create a `CStrIn` by copying a byte slice.
     ///
-    /// If the byte slice contains an interior NUL byte, `None` is returned.
-    pub fn from_bytes(s: &[u8]) -> Option<CStrIn> {
-        if s.contains(&NUL) {
-            return None;
+    /// # Failure
+    ///
+    /// Returns `Err` the byte slice contains an interior NUL byte.
+    pub fn from_bytes(s: &[u8]) -> Result<CStrIn, CStrError> {
+        if let Some(pos) = s.position_elem(&NUL) {
+            return Err(CStrError::ContainsNul(pos));
         }
-        Some(vec_into_c_str(s.to_vec()))
+        Ok(vec_into_c_str(s.to_vec()))
     }
 
     /// Create a `CStrIn` by copying a byte slice,
@@ -308,9 +338,11 @@ impl CStrIn {
 
     /// Create a `CStrIn` by copying a string slice.
     ///
-    /// If the string contains an interior NUL character, `None` is returned.
+    /// # Failure
+    ///
+    /// Returns `Err` if the string contains an interior NUL character.
     #[inline]
-    pub fn from_str(s: &str) -> Option<CStrIn> {
+    pub fn from_str(s: &str) -> Result<CStrIn, CStrError> {
         CStrIn::from_bytes(s.as_bytes())
     }
 
@@ -370,12 +402,14 @@ impl CStrIn {
 /// and copying of the string buffer.
 pub trait IntoCStr {
 
-    /// Transform the receiver into a `CStrIn`.
+    /// Transforms the receiver into a `CStrIn`.
     ///
-    /// If the receiver contains interior null bytes, `None` is returned.
-    fn into_c_str(self) -> Option<CStrIn>;
+    /// # Failure
+    ///
+    /// Returns `Err` if the receiver contains an interior NUL byte.
+    fn into_c_str(self) -> Result<CStrIn, CStrError>;
 
-    /// Transform the receiver into a `CStrIn`
+    /// Transforms the receiver into a `CStrIn`
     /// without checking for interior NUL bytes.
     unsafe fn into_c_str_unchecked(self) -> CStrIn;
 }
@@ -383,7 +417,7 @@ pub trait IntoCStr {
 impl<'a> IntoCStr for &'a [u8] {
 
     #[inline]
-    fn into_c_str(self) -> Option<CStrIn> {
+    fn into_c_str(self) -> Result<CStrIn, CStrError> {
         CStrIn::from_bytes(self)
     }
 
@@ -396,7 +430,7 @@ impl<'a> IntoCStr for &'a [u8] {
 impl<'a> IntoCStr for &'a str {
 
     #[inline]
-    fn into_c_str(self) -> Option<CStrIn> {
+    fn into_c_str(self) -> Result<CStrIn, CStrError> {
         CStrIn::from_str(self)
     }
 
@@ -408,11 +442,11 @@ impl<'a> IntoCStr for &'a str {
 
 impl IntoCStr for Vec<u8> {
 
-    fn into_c_str(self) -> Option<CStrIn> {
-        if self.as_slice().contains(&NUL) {
-            return None;
+    fn into_c_str(self) -> Result<CStrIn, CStrError> {
+        if let Some(pos) = self.as_slice().position_elem(&NUL) {
+            return Err(CStrError::ContainsNul(pos));
         }
-        Some(vec_into_c_str(self))
+        Ok(vec_into_c_str(self))
     }
 
     unsafe fn into_c_str_unchecked(self) -> CStrIn {
@@ -423,7 +457,7 @@ impl IntoCStr for Vec<u8> {
 impl IntoCStr for String {
 
     #[inline]
-    fn into_c_str(self) -> Option<CStrIn> {
+    fn into_c_str(self) -> Result<CStrIn, CStrError> {
         self.into_bytes().into_c_str()
     }
 
@@ -566,14 +600,14 @@ mod tests {
     {
         let mut i = 0;
         for src in sources.into_iter() {
-            let c_str = src.clone().into_c_str().unwrap();
+            let c_str = src.clone().into_c_str().ok().unwrap();
             check_c_str(&c_str, expected[i]);
             let c_str = unsafe { src.into_c_str_unchecked() };
             check_c_str(&c_str, expected[i]);
             i += 1;
         }
 
-        assert!(invalid.into_c_str().is_none());
+        assert!(invalid.into_c_str().is_err());
     }
 
     #[test]
@@ -744,7 +778,7 @@ mod bench {
 
     #[inline]
     fn check_into_c_str<Src>(s: Src, expected: &str) where Src: IntoCStr {
-        let c_str = s.into_c_str().unwrap();
+        let c_str = s.into_c_str().ok().unwrap();
         check_c_str(&c_str, expected.as_bytes());
     }
 
