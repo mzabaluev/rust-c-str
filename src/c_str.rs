@@ -592,6 +592,16 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_as_utf8_unchecked() {
+        let c_str = str_dup("hello");
+        let s = unsafe { c_str.parse_as_utf8_unchecked() };
+        assert_eq!(s, "hello");
+        let c_str = str_dup("");
+        let s = unsafe { c_str.parse_as_utf8_unchecked() };
+        assert_eq!(s, "");
+    }
+
+    #[test]
     #[should_fail]
     fn test_str_constructor_fail() {
         let _c_str = unsafe { CString::from_raw_buf(ptr::null()) };
