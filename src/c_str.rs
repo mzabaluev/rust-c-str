@@ -49,9 +49,12 @@
 //! fn main() {
 //!     let my_string = "Hello, world!";
 //!
-//!     // Allocate the C string with an explicit local that owns the string. The
-//!     // string will be deallocated when `my_c_string` goes out of scope.
-//!     let my_c_string = CStrArg::from_str(my_string).ok().unwrap();
+//!     // Allocate the C string with an explicit local that owns the string.
+//!     // The string will be deallocated when `my_c_string` goes out of scope.
+//!     let my_c_string = match CStrArg::from_str(my_string) {
+//!             Ok(s) => s,
+//!             Err(e) => panic!(e)
+//!         };
 //!     unsafe {
 //!         puts(my_c_string.as_ptr());
 //!     }
@@ -286,7 +289,7 @@ impl Error for CStrError {
     fn description(&self) -> &str {
         match *self {
             CStrError::ContainsNul(_)
-                => "Conversion to C string from data containing a zero byte is not possible"
+                => "invalid data for C string: contains a NUL byte"
         }
     }
 
@@ -294,6 +297,15 @@ impl Error for CStrError {
         match *self {
             CStrError::ContainsNul(pos)
                 => Some(format!("NUL at position {}", pos))
+        }
+    }
+}
+
+impl fmt::Show for CStrError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            CStrError::ContainsNul(pos)
+                => write!(f, "invalid data for C string: NUL at position {}", pos),
         }
     }
 }
@@ -600,7 +612,7 @@ mod tests {
     {
         let mut i = 0;
         for src in sources.into_iter() {
-            let c_str = src.clone().into_c_str().ok().unwrap();
+            let c_str = src.clone().into_c_str().unwrap();
             check_c_str(&c_str, expected[i]);
             let c_str = unsafe { src.into_c_str_unchecked() };
             check_c_str(&c_str, expected[i]);
@@ -778,7 +790,7 @@ mod bench {
 
     #[inline]
     fn check_into_c_str<Src>(s: Src, expected: &str) where Src: IntoCStr {
-        let c_str = s.into_c_str().ok().unwrap();
+        let c_str = s.into_c_str().unwrap();
         check_c_str(&c_str, expected.as_bytes());
     }
 
