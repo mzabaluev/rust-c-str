@@ -375,8 +375,10 @@ impl CStrArg {
     ///
     /// Panics if the byte array is not null-terminated.
     pub fn from_static_bytes(bytes: &'static [u8]) -> CStrArg {
+        assert!(!bytes.is_empty());
+        // FIXME: a better way to pretty-print byte strings
         assert!(bytes[bytes.len() - 1] == NUL,
-                "static byte string is not null-terminated: \"{}\"", bytes);
+                "static byte string is not null-terminated: {}", bytes);
         CStrArg { data: CStrData::Static(bytes) }
     }
 
@@ -390,10 +392,9 @@ impl CStrArg {
     ///
     /// Panics if the string is not null-terminated.
     pub fn from_static_str(s: &'static str) -> CStrArg {
-        let bytes = s.as_bytes();
-        assert!(bytes[bytes.len() - 1] == NUL,
+        assert!(s.ends_with("\0"),
                 "static string is not null-terminated: \"{}\"", s);
-        CStrArg { data: CStrData::Static(bytes) }
+        CStrArg { data: CStrData::Static(s.as_bytes()) }
     }
 
     /// Returns a raw pointer to the null-terminated C string.
@@ -572,7 +573,7 @@ mod tests {
     use libc;
     use super::testutil::check_c_str;
 
-    use super::{CString,IntoCStr,CChars,LibcDtor};
+    use super::{CString, CStrArg, IntoCStr, CChars, LibcDtor};
     use super::from_c_multistring;
 
     fn bytes_dup(s: &[u8]) -> CString<LibcDtor> {
@@ -770,6 +771,12 @@ mod tests {
     #[should_fail]
     fn test_str_constructor_fail() {
         let _c_str = unsafe { CString::from_raw_buf(ptr::null()) };
+    }
+
+    #[test]
+    #[should_fail]
+    fn test_c_str_arg_from_static_bytes_fail() {
+        let _c_str = CStrArg::from_static_bytes(b"no nul\xFF");
     }
 
     #[test]
