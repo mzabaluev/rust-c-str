@@ -375,9 +375,8 @@ impl CStrArg {
     ///
     /// Panics if the byte array is not null-terminated.
     pub fn from_static_bytes(bytes: &'static [u8]) -> CStrArg {
-        assert!(!bytes.is_empty());
         // FIXME: a better way to pretty-print byte strings
-        assert!(bytes[bytes.len() - 1] == NUL,
+        assert!(bytes.last() == Some(&NUL),
                 "static byte string is not null-terminated: {}", bytes);
         CStrArg { data: CStrData::Static(bytes) }
     }
