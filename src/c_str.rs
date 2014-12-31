@@ -310,9 +310,12 @@ impl fmt::Show for CStrError {
     }
 }
 
+const IN_PLACE_LEN: uint = 15;
+
 enum CStrData {
     Static(&'static [u8]),
-    Owned(Vec<u8>)
+    Owned(Vec<u8>),
+    InPlace([u8; IN_PLACE_LEN + 1])
 }
 
 /// An adaptor type to pass C string data to foreign functions.
@@ -323,7 +326,30 @@ pub struct CStrArg {
     data: CStrData
 }
 
-fn vec_into_c_str(mut v: Vec<u8>) -> CStrArg {
+fn bytes_into_c_str(s: &[u8]) -> CStrArg {
+    copy_in_place(s).unwrap_or_else(move || {
+        long_vec_into_c_str(s.to_vec())
+    })
+}
+
+fn vec_into_c_str(v: Vec<u8>) -> CStrArg {
+    copy_in_place(v.as_slice()).unwrap_or_else(move || {
+        long_vec_into_c_str(v)
+    })
+}
+
+fn copy_in_place(s: &[u8]) -> Option<CStrArg> {
+    let len = s.len();
+    if len <= IN_PLACE_LEN {
+        let mut buf: [u8; IN_PLACE_LEN + 1] = unsafe { mem::uninitialized() };
+        slice::bytes::copy_memory(&mut buf, s);
+        buf[len] = 0;
+        return Some(CStrArg { data: CStrData::InPlace(buf) });
+    }
+    None
+}
+
+fn long_vec_into_c_str(mut v: Vec<u8>) -> CStrArg {
     v.push(NUL);
     CStrArg { data: CStrData::Owned(v) }
 }
@@ -339,13 +365,13 @@ impl CStrArg {
         if let Some(pos) = s.position_elem(&NUL) {
             return Err(CStrError::ContainsNul(pos));
         }
-        Ok(vec_into_c_str(s.to_vec()))
+        Ok(bytes_into_c_str(s))
     }
 
     /// Create a `CStrArg` by copying a byte slice,
     /// without checking for interior NUL characters.
     pub unsafe fn from_bytes_unchecked(s: &[u8]) -> CStrArg {
-        vec_into_c_str(s.to_vec())
+        bytes_into_c_str(s)
     }
 
     /// Create a `CStrArg` by copying a string slice.
@@ -402,8 +428,9 @@ impl CStrArg {
     /// therefore it is invalidated when the value is dropped.
     pub fn as_ptr(&self) -> *const libc::c_char {
         match self.data {
-            CStrData::Static(s)     => s.as_ptr() as *const libc::c_char,
-            CStrData::Owned(ref v)  => v.as_ptr() as *const libc::c_char
+            CStrData::Static(s)      => s.as_ptr() as *const libc::c_char,
+            CStrData::Owned(ref v)   => v.as_ptr() as *const libc::c_char,
+            CStrData::InPlace(ref a) => a.as_ptr() as *const libc::c_char
         }
     }
 }
@@ -624,8 +651,8 @@ mod tests {
 
     #[test]
     fn test_bytes_into_c_str() {
-        test_into_c_str(vec!(b"", b"hello", b"foo\xFF"),
-                        &[b"", b"hello", b"foo\xFF"],
+        test_into_c_str(vec!(b"", b"hello", b"foo\xFF", b"Mary had a little lamb"),
+                        &[b"", b"hello", b"foo\xFF", b"Mary had a little lamb"],
                         b"he\x00llo");
     }
 
