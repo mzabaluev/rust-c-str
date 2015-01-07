@@ -1,12 +1,28 @@
 CARGO = cargo
 
+CARGO_OPTS =
+
 all:
-	$(CARGO) build
+	$(MAKE) build
+	$(MAKE) doc
+
+build:
+	$(CARGO) $(CARGO_OPTS) build
 
 clean:
-	$(CARGO) clean
+	$(CARGO) $(CARGO_OPTS) clean
 
-check: all
-	$(CARGO) test
+check:
+	$(MAKE) build
+	$(MAKE) test
 
-.PHONY: all clean check
+test:
+	$(CARGO) $(CARGO_OPTS) test
+
+bench:
+	$(CARGO) $(CARGO_OPTS) bench
+
+doc:
+	$(CARGO) $(CARGO_OPTS) doc
+
+.PHONY: all build clean check test bench doc
