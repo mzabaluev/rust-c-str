@@ -9,9 +9,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-//! C-string manipulation and management
+#![crate_name = "c_str"]
+#![crate_type = "lib"]
+
+//! C string manipulation and management
 //!
-//! This modules provides the basic methods for creating and managing
+//! This library provides helpers for creating and managing
 //! null-terminated strings for use with FFI calls. Most C APIs require
 //! that the string being passed to them is null-terminated and many of them
 //! allocate and return null-terminated strings, but Rust's built-in string
@@ -39,10 +42,10 @@
 //! ```rust
 //! #![allow(unstable)]
 //!
-//! extern crate c_compat;
+//! extern crate c_str;
 //! extern crate libc;
 //!
-//! use c_compat::c_str::CStrArg;
+//! use c_str::CStrArg;
 //!
 //! extern {
 //!     fn puts(s: *const libc::c_char);
@@ -63,6 +66,16 @@
 //! }
 //! ```
 
+#![allow(unstable)]
+#![allow(unstable_features)]
+
+#![feature(unsafe_destructor)]
+
+extern crate libc;
+
+#[cfg(test)]
+extern crate test;
+
 use std::cmp::Ordering;
 use std::default::Default;
 use std::error::Error;
@@ -72,7 +85,6 @@ use std::marker;
 use std::mem;
 use std::slice;
 use std::str;
-use libc;
 
 const NUL: u8 = 0;
 
