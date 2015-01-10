@@ -15,7 +15,9 @@
 #![crate_name = "c_compat"]
 #![crate_type = "lib"]
 
-#![feature(default_type_params)]
+#![allow(unstable)]
+#![allow(unstable_features)]
+
 #![feature(unsafe_destructor)]
 
 extern crate libc;

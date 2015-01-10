@@ -37,6 +37,8 @@
 //! An example of creating and using a C string would be:
 //!
 //! ```rust
+//! #![allow(unstable)]
+//!
 //! extern crate c_compat;
 //! extern crate libc;
 //!
@@ -66,7 +68,7 @@ use std::default::Default;
 use std::error::Error;
 use std::fmt;
 use std::hash;
-use std::kinds::marker;
+use std::marker;
 use std::mem;
 use std::slice;
 use std::str;
@@ -82,9 +84,9 @@ const NUL: u8 = 0;
 ///
 /// Panics if the string pointer is null.
 pub unsafe fn parse_as_bytes(raw: & *const libc::c_char) -> &[u8] {
-    assert!(raw.is_not_null());
+    assert!(!raw.is_null());
     let r = mem::copy_lifetime(raw, &(*raw as *const u8));
-    slice::from_raw_buf(r, libc::strlen(*raw) as uint)
+    slice::from_raw_buf(r, libc::strlen(*raw) as usize)
 }
 
 /// Scans a C string as UTF-8 string slice.
@@ -139,34 +141,34 @@ impl<D1, D2> PartialEq<CString<D2>> for CString<D1>
     }
 }
 
-impl<D1, D2> Eq<CString<D2>> for CString<D1>
-    where D1: Dtor, D2: Dtor
+impl<D1> Eq for CString<D1>
+    where D1: Dtor
 {
 }
 
 impl<D1, D2> PartialOrd<CString<D2>> for CString<D1>
     where D1: Dtor, D2: Dtor
 {
-    #[inline]
     fn partial_cmp(&self, other: &CString<D2>) -> Option<Ordering> {
-        Some(self.cmp(other))
+        let res = unsafe { libc::strcmp(self.ptr, other.ptr) as i32 };
+        res.partial_cmp(&0i32)
     }
 }
 
-impl<D1, D2> Ord<CString<D2>> for CString<D1>
-    where D1: Dtor, D2: Dtor
+impl<D1> Ord for CString<D1>
+    where D1: Dtor
 {
-    fn cmp(&self, other: &CString<D2>) -> Ordering {
-        let res = unsafe { libc::strcmp(self.ptr, other.ptr) as int };
-        res.cmp(&0)
+    fn cmp(&self, other: &Self) -> Ordering {
+        let res = unsafe { libc::strcmp(self.ptr, other.ptr) as i32 };
+        res.cmp(&0i32)
     }
 }
 
-impl<S, D> hash::Hash<S> for CString<D>
-    where S: hash::Writer, D: Dtor
+impl<D, H> hash::Hash<H> for CString<D>
+    where D: Dtor, H: hash::Hasher + hash::Writer
 {
-    fn hash(&self, state: &mut S) {
-        state.write(self.parse_as_bytes());
+    fn hash(&self, state: &mut H) {
+        self.parse_as_bytes().hash(state)
     }
 }
 
@@ -178,7 +180,7 @@ pub trait Dtor {
 
 /// A destructor for `CString` that uses `libc::free`
 /// to deallocate the string.
-#[deriving(Copy, Default)]
+#[derive(Copy, Default)]
 pub struct LibcDtor;
 
 impl Dtor for LibcDtor {
@@ -198,7 +200,7 @@ impl<D> CString<D> where D: Dtor + Default {
     ///
     /// Panics if `ptr` is null.
     pub unsafe fn from_raw_buf(ptr: *const libc::c_char) -> CString<D> {
-        assert!(ptr.is_not_null());
+        assert!(!ptr.is_null());
         CString { ptr: ptr, dtor: Default::default() }
     }
 }
@@ -211,7 +213,7 @@ impl<D> CString<D> where D: Dtor {
     ///
     /// Panics if `ptr` is null.
     pub unsafe fn with_dtor(ptr: *mut libc::c_char, dtor: D) -> CString<D> {
-        assert!(ptr.is_not_null());
+        assert!(!ptr.is_null());
         CString { ptr: ptr, dtor: dtor }
     }
 
@@ -221,7 +223,7 @@ impl<D> CString<D> where D: Dtor {
     pub fn parse_as_bytes(&self) -> &[u8] {
         unsafe {
             let r = mem::copy_lifetime(self, &(self.ptr as *const u8));
-            slice::from_raw_buf(r, libc::strlen(self.ptr) as uint)
+            slice::from_raw_buf(r, libc::strlen(self.ptr) as usize)
         }
     }
 
@@ -270,13 +272,13 @@ impl<D> fmt::Show for CString<D> where D: Dtor {
 }
 
 /// Errors which can occur when attempting to convert data to a C string.
-#[deriving(Copy)]
+#[derive(Copy)]
 pub enum CStrError {
 
     /// The source string or a byte sequence contains a NUL byte.
     ///
     /// The integer gives a byte offset where the first NUL occurs.
-    ContainsNul(uint)
+    ContainsNul(usize)
 }
 
 impl Error for CStrError {
@@ -305,7 +307,7 @@ impl fmt::Show for CStrError {
     }
 }
 
-const IN_PLACE_LEN: uint = 15;
+const IN_PLACE_LEN: usize = 15;
 
 enum CStrData {
     Static(&'static [u8]),
@@ -347,6 +349,18 @@ fn copy_in_place(s: &[u8]) -> Option<CStrArg> {
 fn long_vec_into_c_str(mut v: Vec<u8>) -> CStrArg {
     v.push(NUL);
     CStrArg { data: CStrData::Owned(v) }
+}
+
+fn escape_bytestring(s: &[u8]) -> String {
+    use std::ascii;
+
+    let mut acc = Vec::with_capacity(s.len());
+    for c in s.iter() {
+        ascii::escape_default(*c, |esc| {
+            acc.push(esc);
+        })
+    }
+    unsafe { String::from_utf8_unchecked(acc) }
 }
 
 impl CStrArg {
@@ -396,9 +410,9 @@ impl CStrArg {
     ///
     /// Panics if the byte array is not null-terminated.
     pub fn from_static_bytes(bytes: &'static [u8]) -> CStrArg {
-        // FIXME: a better way to pretty-print byte strings
         assert!(bytes.last() == Some(&NUL),
-                "static byte string is not null-terminated: {}", bytes);
+                "static byte string is not null-terminated: \"{}\"",
+                escape_bytestring(bytes));
         CStrArg { data: CStrData::Static(bytes) }
     }
 
@@ -521,12 +535,15 @@ impl<'a> CChars<'a> {
     ///
     /// Panics if the pointer is null.
     pub unsafe fn from_raw_ptr(ptr: &'a *const libc::c_char) -> CChars<'a> {
-        assert!(ptr.is_not_null());
+        assert!(!ptr.is_null());
         CChars { ptr: *ptr, lifetime: marker::ContravariantLifetime }
     }
 }
 
-impl<'a> Iterator<libc::c_char> for CChars<'a> {
+impl<'a> Iterator for CChars<'a> {
+
+    type Item = libc::c_char;
+
     fn next(&mut self) -> Option<libc::c_char> {
         let ch = unsafe { *self.ptr };
         if ch == 0 {
@@ -547,20 +564,20 @@ impl<'a> Iterator<libc::c_char> for CChars<'a> {
 /// The specified closure is invoked with each string that
 /// is found, and the number of strings found is returned.
 pub unsafe fn from_c_multistring<F>(buf: *const libc::c_char,
-                                    limit: Option<uint>,
-                                    mut f: F) -> uint
+                                    limit: Option<usize>,
+                                    mut f: F) -> usize
     where F: FnMut(&[u8])
 {
     let mut curr_ptr = buf;
-    let mut ctr = 0u;
+    let mut ctr = 0us;
     let (limited_count, limit) = match limit {
         Some(limit) => (true, limit),
         None => (false, 0)
     };
     while (!limited_count || ctr < limit) && *curr_ptr != 0 {
-        let len = libc::strlen(curr_ptr) as uint;
+        let len = libc::strlen(curr_ptr) as usize;
         f(slice::from_raw_buf(&(curr_ptr as *const u8), len));
-        curr_ptr = curr_ptr.offset(len as int + 1);
+        curr_ptr = curr_ptr.offset(len as isize + 1);
         ctr += 1;
     }
     return ctr;
@@ -575,11 +592,11 @@ mod testutil {
     pub fn check_c_str(c_str: &CStrArg, expected: &[u8]) {
         let buf = c_str.as_ptr();
         let len = expected.len();
-        for i in range(0u, len) {
-            let byte = unsafe { *buf.offset(i as int) as u8 };
+        for i in range(0, len) {
+            let byte = unsafe { *buf.offset(i as isize) as u8 };
             assert_eq!(byte, expected[i]);
         }
-        let term = unsafe { *buf.offset(len as int) as u8 };
+        let term = unsafe { *buf.offset(len as isize) as u8 };
         assert_eq!(term, 0);
     }
 }
@@ -599,7 +616,7 @@ mod tests {
         unsafe {
             let dup = libc::malloc(len as libc::size_t) as *mut u8;
             ptr::copy_nonoverlapping_memory(dup, s.as_ptr(), len);
-            *dup.offset(len as int) = 0;
+            *dup.offset(len as isize) = 0;
             CString::from_raw_buf(dup as *const i8)
         }
     }
@@ -788,7 +805,9 @@ mod tests {
     #[test]
     #[should_fail]
     fn test_str_constructor_fail() {
-        let _c_str = unsafe { CString::from_raw_buf(ptr::null()) };
+        let _c_str: CString<LibcDtor> = unsafe {
+            CString::from_raw_buf(ptr::null())
+        };
     }
 
     #[test]
