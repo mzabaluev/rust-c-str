@@ -329,15 +329,11 @@ pub struct CStrArg {
 }
 
 fn bytes_into_c_str(s: &[u8]) -> CStrArg {
-    copy_in_place(s).unwrap_or_else(move || {
-        long_vec_into_c_str(s.to_vec())
-    })
+    copy_in_place(s).unwrap_or(long_vec_into_c_str(s.to_vec()))
 }
 
 fn vec_into_c_str(v: Vec<u8>) -> CStrArg {
-    copy_in_place(v.as_slice()).unwrap_or_else(move || {
-        long_vec_into_c_str(v)
-    })
+    copy_in_place(v.as_slice()).unwrap_or(long_vec_into_c_str(v))
 }
 
 fn copy_in_place(s: &[u8]) -> Option<CStrArg> {
