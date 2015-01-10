@@ -61,18 +61,13 @@
 //! }
 //! ```
 
-#![no_implicit_prelude]
-
+use std::cmp::Ordering;
 use std::default::Default;
 use std::error::Error;
 use std::fmt;
 use std::hash;
 use std::kinds::marker;
 use std::mem;
-use std::prelude::{AsSlice, CloneSliceExt, Drop, Eq, Err, FnMut, Iterator};
-use std::prelude::{None, Ok, Option, Ord, Ordering, PartialEq};
-use std::prelude::{PartialEqSliceExt, PartialOrd, RawPtr, Result, SliceExt};
-use std::prelude::{Some, StrExt, String, Vec};
 use std::slice;
 use std::str;
 use libc;
@@ -574,7 +569,6 @@ pub unsafe fn from_c_multistring<F>(buf: *const libc::c_char,
 #[cfg(test)]
 mod testutil {
     use super::CStrArg;
-    use std::prelude::{RawPtr,SliceExt};
     use std::iter::range;
 
     #[inline]
@@ -593,8 +587,6 @@ mod testutil {
 #[cfg(test)]
 mod tests {
     use std::iter::Iterator;
-    use std::prelude::{Clone, CloneSliceExt, None, Ok, RawPtr, SliceExt, Some};
-    use std::prelude::{StrExt, String, Vec};
     use std::ptr;
     use libc;
     use super::testutil::check_c_str;
@@ -816,7 +808,6 @@ mod tests {
 #[cfg(test)]
 mod bench {
     use test::Bencher;
-    use std::prelude::{Str, StrExt, ToString};
     use super::testutil::check_c_str;
 
     use super::IntoCStr;
