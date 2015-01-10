@@ -83,10 +83,13 @@ const NUL: u8 = 0;
 /// # Panics
 ///
 /// Panics if the string pointer is null.
-pub unsafe fn parse_as_bytes(raw: & *const libc::c_char) -> &[u8] {
+pub unsafe fn parse_as_bytes<'a, T: ?Sized>(raw: *const libc::c_char,
+                                            life_anchor: &'a T)
+                                           -> &'a [u8]
+{
     assert!(!raw.is_null());
-    let r = mem::copy_lifetime(raw, &(*raw as *const u8));
-    slice::from_raw_buf(r, libc::strlen(*raw) as usize)
+    let r = mem::copy_lifetime(life_anchor, &(raw as *const u8));
+    slice::from_raw_buf(r, libc::strlen(raw) as usize)
 }
 
 /// Scans a C string as UTF-8 string slice.
@@ -99,10 +102,11 @@ pub unsafe fn parse_as_bytes(raw: & *const libc::c_char) -> &[u8] {
 ///
 /// Panics if the string pointer is null.
 #[inline]
-pub unsafe fn parse_as_utf8<'a>(raw: & *const libc::c_char)
-                               -> Result<&str, str::Utf8Error>
+pub unsafe fn parse_as_utf8<'a, T: ?Sized>(raw: *const libc::c_char,
+                                           life_anchor: &'a T)
+                                          -> Result<&'a str, str::Utf8Error>
 {
-    str::from_utf8(parse_as_bytes(raw))
+    str::from_utf8(parse_as_bytes(raw, life_anchor))
 }
 
 /// Scans a C string as UTF-8 string slice without validity checks.
@@ -111,10 +115,11 @@ pub unsafe fn parse_as_utf8<'a>(raw: & *const libc::c_char)
 ///
 /// Panics if the string pointer is null.
 #[inline]
-pub unsafe fn parse_as_utf8_unchecked(raw: & *const libc::c_char)
-                                     -> &str
+pub unsafe fn parse_as_utf8_unchecked<'a, T: ?Sized>(raw: *const libc::c_char,
+                                                     life_anchor: &'a T)
+                                                    -> &'a str
 {
-    str::from_utf8_unchecked(parse_as_bytes(raw))
+    str::from_utf8_unchecked(parse_as_bytes(raw, life_anchor))
 }
 
 /// Representation of an allocated C String.
@@ -534,9 +539,12 @@ impl<'a> CChars<'a> {
     /// # Panics
     ///
     /// Panics if the pointer is null.
-    pub unsafe fn from_raw_ptr(ptr: &'a *const libc::c_char) -> CChars<'a> {
+    pub unsafe fn from_raw_ptr<T: ?Sized>(ptr: *const libc::c_char,
+                                          _life_anchor: &'a T)
+                                         -> CChars<'a>
+    {
         assert!(!ptr.is_null());
-        CChars { ptr: *ptr, lifetime: marker::ContravariantLifetime }
+        CChars { ptr: ptr, lifetime: marker::ContravariantLifetime }
     }
 }
 
@@ -712,36 +720,36 @@ mod tests {
     #[test]
     fn test_parse_as_bytes() {
         let c_str = str_dup("hello");
-        let bytes = unsafe { super::parse_as_bytes(&c_str.ptr) };
+        let bytes = unsafe { super::parse_as_bytes(c_str.ptr, &c_str) };
         assert_eq!(bytes, b"hello");
         let c_str = str_dup("");
-        let bytes = unsafe { super::parse_as_bytes(&c_str.ptr) };
+        let bytes = unsafe { super::parse_as_bytes(c_str.ptr, &c_str) };
         assert_eq!(bytes, b"");
         let c_str = bytes_dup(b"foo\xFF");
-        let bytes = unsafe { super::parse_as_bytes(&c_str.ptr) };
+        let bytes = unsafe { super::parse_as_bytes(c_str.ptr, &c_str) };
         assert_eq!(bytes, b"foo\xFF");
     }
 
     #[test]
     fn test_parse_as_utf8() {
         let c_str = str_dup("hello");
-        let res = unsafe { super::parse_as_utf8(&c_str.ptr) };
+        let res = unsafe { super::parse_as_utf8(c_str.ptr, &c_str) };
         assert_eq!(res, Ok("hello"));
         let c_str = str_dup("");
-        let res = unsafe { super::parse_as_utf8(&c_str.ptr) };
+        let res = unsafe { super::parse_as_utf8(c_str.ptr, &c_str) };
         assert_eq!(res, Ok(""));
         let c_str = bytes_dup(b"foo\xFF");
-        let res = unsafe { super::parse_as_utf8(&c_str.ptr) };
+        let res = unsafe { super::parse_as_utf8(c_str.ptr, &c_str) };
         assert!(res.is_err());
     }
 
     #[test]
     fn test_parse_as_utf8_unchecked() {
         let c_str = str_dup("hello");
-        let s = unsafe { super::parse_as_utf8_unchecked(&c_str.ptr) };
+        let s = unsafe { super::parse_as_utf8_unchecked(c_str.ptr, &c_str) };
         assert_eq!(s, "hello");
         let c_str = str_dup("");
-        let s = unsafe { super::parse_as_utf8_unchecked(&c_str.ptr) };
+        let s = unsafe { super::parse_as_utf8_unchecked(c_str.ptr, &c_str) };
         assert_eq!(s, "");
     }
 
@@ -780,7 +788,7 @@ mod tests {
     fn test_parse_null_as_bytes_fail() {
         unsafe {
             let p: *const libc::c_char = ptr::null();
-            let _ = super::parse_as_bytes(&p);
+            let _ = super::parse_as_bytes(p, &p);
         };
     }
 
@@ -789,7 +797,7 @@ mod tests {
     fn test_parse_null_as_utf8_fail() {
         unsafe {
             let p: *const libc::c_char = ptr::null();
-            let _ = super::parse_as_utf8(&p);
+            let _ = super::parse_as_utf8(p, &p);
         };
     }
 
@@ -798,7 +806,7 @@ mod tests {
     fn test_parse_null_as_utf8_unchecked_fail() {
         unsafe {
             let p: *const libc::c_char = ptr::null();
-            let _ = super::parse_as_utf8_unchecked(&p);
+            let _ = super::parse_as_utf8_unchecked(p, &p);
         };
     }
 
@@ -820,7 +828,7 @@ mod tests {
     #[should_fail]
     fn test_chars_constructor_fail() {
         let p: *const libc::c_char = ptr::null();
-        let _chars = unsafe { CChars::from_raw_ptr(&p) };
+        let _chars = unsafe { CChars::from_raw_ptr(p, &p) };
     }
 }
 
