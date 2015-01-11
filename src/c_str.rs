@@ -12,8 +12,6 @@
 #![crate_name = "c_str"]
 #![crate_type = "lib"]
 
-//! C string manipulation and management
-//!
 //! This library provides helpers for creating and managing
 //! null-terminated strings for use with FFI calls. Most C APIs require
 //! that the string being passed to them is null-terminated and many of them
