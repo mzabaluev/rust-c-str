@@ -25,11 +25,13 @@
 //! valid Unicode codepoint). This means that not all Rust strings can actually
 //! be translated to C strings.
 //!
-//! # Creation of a C string
+//! # Managing foreign-allocated C strings
 //!
-//! An allocated C string is managed through the generic type `CString`
-//! defined in this module. Values of this type "own" an internal buffer of
-//! characters and will call a destructor when the value is dropped.
+//! An allocated C string is managed through the generic type `CString`.
+//! Values of this type "own" an internal buffer of characters and will call
+//! a destructor when the value is dropped.
+//!
+//! # Creation of a C string
 //!
 //! The type `CStrArg` is used to adapt string data from Rust for calling
 //! C functions that expect a null-terminated string. The conversion
@@ -90,6 +92,7 @@ const NUL: u8 = 0;
 
 /// Scans a C string as a byte slice.
 ///
+/// The second parameter provides the lifetime for the returned slice.
 /// The returned slice does not include the terminating NUL byte.
 ///
 /// # Panics
@@ -105,6 +108,8 @@ pub unsafe fn parse_as_bytes<'a, T: ?Sized>(raw: *const libc::c_char,
 }
 
 /// Scans a C string as UTF-8 string slice.
+///
+/// The second parameter provides the lifetime for the returned slice.
 ///
 /// # Failure
 ///
@@ -213,6 +218,8 @@ impl<D> CString<D> where D: Dtor {
 
     /// Create a `CString` from a foreign pointer and a destructor.
     ///
+    /// The destructor will be invoked when the `CString` is dropped.
+    ///
     ///# Panics
     ///
     /// Panics if `ptr` is null.
@@ -275,7 +282,7 @@ pub enum CStrError {
 
     /// The source string or a byte sequence contains a NUL byte.
     ///
-    /// The integer gives a byte offset where the first NUL occurs.
+    /// The integer gives the byte offset where the first NUL occurs.
     ContainsNul(usize)
 }
 
@@ -563,6 +570,8 @@ impl<'a> CChars<'a> {
     /// Constructs a `CChars` iterator from a raw pointer to a
     /// null-terminated string.
     ///
+    /// The second parameter provides the lifetime for the returned iterator.
+    ///
     /// # Panics
     ///
     /// Panics if the pointer is null.
@@ -590,7 +599,10 @@ impl<'a> Iterator for CChars<'a> {
     }
 }
 
-/// Parses a C "multistring", eg windows env values or
+/// Parses a C "multistring".
+///
+/// This function can be used to process the "multistring" format
+/// used by some C APIs, e.g. Windows environment variable values or
 /// the `req->ptr` result in a `uv_fs_readdir()` call.
 ///
 /// Optionally, a `limit` can be passed in, limiting the
