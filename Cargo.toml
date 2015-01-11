@@ -3,12 +3,10 @@
 name = "c_string"
 version = "0.0.1-pre"
 authors = [ "Mikhail Zabaluev <mikhail.zabaluev@gmail.com>" ]
-
 description = "C string helpers for Rust"
-
 readme = "README.md"
-
 keywords = ["C", "string"]
+repository = "https://github.com/mzabaluev/rust-c-str.git"
 
 [lib]
 name = "c_string"
