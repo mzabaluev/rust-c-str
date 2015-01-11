@@ -9,7 +9,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![crate_name = "c_str"]
+#![crate_name = "c_string"]
 #![crate_type = "lib"]
 
 //! This library provides helpers for creating and managing
@@ -42,10 +42,10 @@
 //! ```rust
 //! #![allow(unstable)]
 //!
-//! extern crate c_str;
+//! extern crate c_string;
 //! extern crate libc;
 //!
-//! use c_str::CStrArg;
+//! use c_string::CStrArg;
 //!
 //! extern {
 //!     fn puts(s: *const libc::c_char);
@@ -375,11 +375,11 @@ fn escape_bytestring(s: &[u8]) -> String {
 /// #![allow(unstable)]
 ///
 /// #[macro_use]
-/// extern crate c_str;
+/// extern crate c_string;
 ///
 /// extern crate libc;
 ///
-/// use c_str::CStrArg;
+/// use c_string::CStrArg;
 ///
 /// fn my_puts(s: &CStrArg) {
 ///     unsafe { libc::puts(s.as_ptr()) };
