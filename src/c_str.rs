@@ -148,8 +148,8 @@ impl<D1, D2> PartialEq<CString<D2>> for CString<D1>
     }
 }
 
-impl<D1> Eq for CString<D1>
-    where D1: Dtor
+impl<D> Eq for CString<D>
+    where D: Dtor
 {
 }
 
@@ -162,8 +162,8 @@ impl<D1, D2> PartialOrd<CString<D2>> for CString<D1>
     }
 }
 
-impl<D1> Ord for CString<D1>
-    where D1: Dtor
+impl<D> Ord for CString<D>
+    where D: Dtor
 {
     fn cmp(&self, other: &Self) -> Ordering {
         let res = unsafe { libc::strcmp(self.ptr, other.ptr) as i32 };
