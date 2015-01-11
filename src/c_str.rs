@@ -610,9 +610,9 @@ impl<'a> Iterator for CChars<'a> {
 ///
 /// The specified closure is invoked with each string that
 /// is found, and the number of strings found is returned.
-pub unsafe fn from_c_multistring<F>(buf: *const libc::c_char,
-                                    limit: Option<usize>,
-                                    mut f: F) -> usize
+pub unsafe fn parse_c_multistring<F>(buf: *const libc::c_char,
+                                     limit: Option<usize>,
+                                     mut f: F) -> usize
     where F: FnMut(&[u8])
 {
     let mut curr_ptr = buf;
@@ -656,7 +656,7 @@ mod tests {
     use super::testutil::check_c_str;
 
     use super::{CString, CStrArg, IntoCStr, CChars, LibcDtor};
-    use super::from_c_multistring;
+    use super::parse_c_multistring;
 
     fn bytes_dup(s: &[u8]) -> CString<LibcDtor> {
         let len = s.len();
@@ -679,7 +679,7 @@ mod tests {
             let ptr = input.as_ptr();
             let expected = ["zero", "one"];
             let mut it = expected.iter();
-            let result = from_c_multistring(ptr as *const libc::c_char, None,
+            let result = parse_c_multistring(ptr as *const libc::c_char, None,
                 |cbytes| {
                     assert_eq!(cbytes, it.next().unwrap().as_bytes());
                 });
