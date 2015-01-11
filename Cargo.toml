@@ -5,6 +5,7 @@ version = "0.0.1-pre"
 authors = [ "Mikhail Zabaluev <mikhail.zabaluev@gmail.com>" ]
 description = "C string helpers for Rust"
 readme = "README.md"
+license = "Apache-2.0/MIT"
 keywords = ["C", "string"]
 repository = "https://github.com/mzabaluev/rust-c-str.git"
 
