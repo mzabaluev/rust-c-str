@@ -357,6 +357,44 @@ fn escape_bytestring(s: &[u8]) -> String {
     unsafe { String::from_utf8_unchecked(acc) }
 }
 
+/// Produce a `CStrArg` out of a static string literal.
+///
+/// This macro provides a convenient way to use string literals in
+/// expressions where a `CStrArg` value is expected.
+/// The macro parameter does not need to end with `"\0"`, it is
+/// appended by the macro.
+///
+/// # Example
+///
+/// ```rust
+/// #![allow(unstable)]
+///
+/// #[macro_use]
+/// extern crate c_str;
+///
+/// extern crate libc;
+///
+/// use c_str::CStrArg;
+///
+/// fn my_puts(s: &CStrArg) {
+///     unsafe { libc::puts(s.as_ptr()) };
+/// }
+///
+/// fn main() {
+///     my_puts(&c_str!("Hello, world!"));
+/// }
+/// ```
+#[macro_export]
+macro_rules! c_str {
+    ($lit:expr) => {
+        // Currently, there is no working way to concatenate a byte string
+        // literal out of bytestring or string literals. Otherwise, we could
+        // use CStrArg::from_static_bytes and accept byte strings as well.
+        // See https://github.com/rust-lang/rfcs/pull/566
+        $crate::CStrArg::from_static_str(concat!($lit, "\0"))
+    }
+}
+
 impl CStrArg {
 
     /// Create a `CStrArg` by copying a byte slice.
@@ -636,6 +674,12 @@ mod tests {
             assert_eq!(result, 2);
             assert!(it.next().is_none());
         }
+    }
+
+    #[test]
+    fn test_c_str_macro() {
+        let c_str = c_str!("hello");
+        check_c_str(&c_str, b"hello");
     }
 
     fn test_into_c_str<Src>(sources: Vec<Src>,
