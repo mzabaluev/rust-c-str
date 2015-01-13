@@ -31,9 +31,9 @@
 //!
 //! # Creation of a C string
 //!
-//! The type `CStrArg` is used to adapt string data from Rust for calling
+//! The type `CStrBuf` is used to adapt string data from Rust for calling
 //! C functions that expect a null-terminated string. The conversion
-//! constructors of `CStrArg` and implementations of trait `IntoCStr` provide
+//! constructors of `CStrBuf` and implementations of trait `IntoCStr` provide
 //! various ways to produce C strings, but the conversions can fail due to
 //! some of the limitations explained above.
 //!
@@ -45,10 +45,10 @@
 //! extern crate c_string;
 //! extern crate libc;
 //!
-//! use c_string::CStrArg;
+//! use c_string::{CStr, CStrBuf};
 //!
-//! extern {
-//!     fn puts(s: *const libc::c_char);
+//! fn safe_puts(s: &CStr) {
+//!     unsafe { libc::puts(s.as_ptr()) };
 //! }
 //!
 //! fn main() {
@@ -56,13 +56,12 @@
 //!
 //!     // Allocate the C string with an explicit local that owns the string.
 //!     // The string will be deallocated when `my_c_string` goes out of scope.
-//!     let my_c_string = match CStrArg::from_str(my_string) {
+//!     let my_c_string = match CStrBuf::from_str(my_string) {
 //!             Ok(s) => s,
 //!             Err(e) => panic!(e)
 //!         };
-//!     unsafe {
-//!         puts(my_c_string.as_ptr());
-//!     }
+//!
+//!     safe_puts(&*my_c_string);
 //! }
 //! ```
 
@@ -83,6 +82,7 @@ use std::fmt;
 use std::hash;
 use std::marker;
 use std::mem;
+use std::ops::Deref;
 use std::slice;
 use std::str;
 
@@ -312,8 +312,8 @@ impl fmt::Show for CStrError {
 
 const IN_PLACE_LEN: usize = 15;
 
+#[derive(Clone)]
 enum CStrData {
-    Static(&'static [u8]),
     Owned(Vec<u8>),
     InPlace([u8; IN_PLACE_LEN + 1])
 }
@@ -322,32 +322,41 @@ enum CStrData {
 ///
 /// Values of this type can be obtained by conversion from Rust strings and
 /// byte slices.
-pub struct CStrArg {
+#[derive(Clone)]
+pub struct CStrBuf {
     data: CStrData
 }
 
-fn bytes_into_c_str(s: &[u8]) -> CStrArg {
+/// A type to denote null-terminated string data dereferenced from `CStrBuf`.
+/// It is only used by reference, such as a parameter in wrapper functions.
+#[repr(C)]
+pub struct CStr {
+    lead: libc::c_char,
+    marker: marker::NoCopy
+}
+
+fn bytes_into_c_str(s: &[u8]) -> CStrBuf {
     copy_in_place(s).unwrap_or(long_vec_into_c_str(s.to_vec()))
 }
 
-fn vec_into_c_str(v: Vec<u8>) -> CStrArg {
+fn vec_into_c_str(v: Vec<u8>) -> CStrBuf {
     copy_in_place(v.as_slice()).unwrap_or(long_vec_into_c_str(v))
 }
 
-fn copy_in_place(s: &[u8]) -> Option<CStrArg> {
+fn copy_in_place(s: &[u8]) -> Option<CStrBuf> {
     let len = s.len();
     if len <= IN_PLACE_LEN {
         let mut buf: [u8; IN_PLACE_LEN + 1] = unsafe { mem::uninitialized() };
         slice::bytes::copy_memory(&mut buf, s);
         buf[len] = 0;
-        return Some(CStrArg { data: CStrData::InPlace(buf) });
+        return Some(CStrBuf { data: CStrData::InPlace(buf) });
     }
     None
 }
 
-fn long_vec_into_c_str(mut v: Vec<u8>) -> CStrArg {
+fn long_vec_into_c_str(mut v: Vec<u8>) -> CStrBuf {
     v.push(NUL);
-    CStrArg { data: CStrData::Owned(v) }
+    CStrBuf { data: CStrData::Owned(v) }
 }
 
 fn escape_bytestring(s: &[u8]) -> String {
@@ -362,10 +371,10 @@ fn escape_bytestring(s: &[u8]) -> String {
     unsafe { String::from_utf8_unchecked(acc) }
 }
 
-/// Produce a `CStrArg` out of a static string literal.
+/// Produce a static `CStr` reference out of a static string literal.
 ///
 /// This macro provides a convenient way to use string literals in
-/// expressions where a `CStrArg` value is expected.
+/// expressions where a `CStr` reference is expected.
 /// The macro parameter does not need to end with `"\0"`, it is
 /// appended by the macro.
 ///
@@ -379,14 +388,8 @@ fn escape_bytestring(s: &[u8]) -> String {
 ///
 /// extern crate libc;
 ///
-/// use c_string::CStrArg;
-///
-/// fn my_puts(s: &CStrArg) {
-///     unsafe { libc::puts(s.as_ptr()) };
-/// }
-///
 /// fn main() {
-///     my_puts(&c_str!("Hello, world!"));
+///     unsafe { libc::puts(c_str!("Hello, world!").as_ptr()) };
 /// }
 /// ```
 #[macro_export]
@@ -394,147 +397,187 @@ macro_rules! c_str {
     ($lit:expr) => {
         // Currently, there is no working way to concatenate a byte string
         // literal out of bytestring or string literals. Otherwise, we could
-        // use CStrArg::from_static_bytes and accept byte strings as well.
+        // use from_static_bytes and accept byte strings as well.
         // See https://github.com/rust-lang/rfcs/pull/566
-        $crate::CStrArg::from_static_str(concat!($lit, "\0"))
+        $crate::from_static_str(concat!($lit, "\0"))
     }
 }
 
-impl CStrArg {
+impl CStrBuf {
 
-    /// Create a `CStrArg` by copying a byte slice.
+    /// Create a `CStrBuf` by copying a byte slice.
     ///
     /// # Failure
     ///
     /// Returns `Err` the byte slice contains an interior NUL byte.
-    pub fn from_bytes(s: &[u8]) -> Result<CStrArg, CStrError> {
+    pub fn from_bytes(s: &[u8]) -> Result<CStrBuf, CStrError> {
         if let Some(pos) = s.position_elem(&NUL) {
             return Err(CStrError::ContainsNul(pos));
         }
         Ok(bytes_into_c_str(s))
     }
 
-    /// Create a `CStrArg` by copying a byte slice,
+    /// Create a `CStrBuf` by copying a byte slice,
     /// without checking for interior NUL characters.
-    pub unsafe fn from_bytes_unchecked(s: &[u8]) -> CStrArg {
+    pub unsafe fn from_bytes_unchecked(s: &[u8]) -> CStrBuf {
         bytes_into_c_str(s)
     }
 
-    /// Create a `CStrArg` by copying a string slice.
+    /// Create a `CStrBuf` by copying a string slice.
     ///
     /// # Failure
     ///
     /// Returns `Err` if the string contains an interior NUL character.
     #[inline]
-    pub fn from_str(s: &str) -> Result<CStrArg, CStrError> {
-        CStrArg::from_bytes(s.as_bytes())
+    pub fn from_str(s: &str) -> Result<CStrBuf, CStrError> {
+        CStrBuf::from_bytes(s.as_bytes())
     }
 
-    /// Create a `CStrArg` by copying a string slice,
+    /// Create a `CStrBuf` by copying a string slice,
     /// without checking for interior NUL characters.
     #[inline]
-    pub unsafe fn from_str_unchecked(s: &str) -> CStrArg {
-        CStrArg::from_bytes_unchecked(s.as_bytes())
+    pub unsafe fn from_str_unchecked(s: &str) -> CStrBuf {
+        CStrBuf::from_bytes_unchecked(s.as_bytes())
     }
+}
 
-    /// Create a `CStrArg` wrapping a static byte array.
-    ///
-    /// This constructor can be used with null-terminated byte string literals.
-    /// For non-literal data, prefer `from_bytes`, since that constructor
-    /// checks for interior NUL bytes.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the byte array is not null-terminated.
-    pub fn from_static_bytes(bytes: &'static [u8]) -> CStrArg {
-        assert!(bytes.last() == Some(&NUL),
-                "static byte string is not null-terminated: \"{}\"",
-                escape_bytestring(bytes));
-        CStrArg { data: CStrData::Static(bytes) }
-    }
+/// Create a `CStr` reference out of a static byte array.
+///
+/// This function can be used with null-terminated byte string literals.
+/// For non-literal data, prefer `CStrBuf::from_bytes`, since that constructor
+/// checks for interior NUL bytes.
+///
+/// # Panics
+///
+/// Panics if the byte array is not null-terminated.
+#[inline]
+pub fn from_static_bytes(bytes: &'static [u8]) -> &'static CStr {
+    assert!(bytes.last() == Some(&NUL),
+            "static byte string is not null-terminated: \"{}\"",
+            escape_bytestring(bytes));
+    let p = bytes.as_ptr() as *const CStr;
+    unsafe { std::mem::copy_lifetime(bytes, &*p) }
+}
 
-    /// Create a `CStrArg` wrapping a static string.
-    ///
-    /// This constructor can be used with null-terminated string literals.
-    /// For non-literal data, prefer `from_str`, since that constructor
-    /// checks for interior NUL characters.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the string is not null-terminated.
-    pub fn from_static_str(s: &'static str) -> CStrArg {
-        assert!(s.ends_with("\0"),
-                "static string is not null-terminated: \"{}\"", s);
-        CStrArg { data: CStrData::Static(s.as_bytes()) }
-    }
+/// Create a `CStr` reference out of a static string.
+///
+/// This function can be used with null-terminated string literals.
+/// For non-literal data, prefer `CStrBuf::from_str`, since that constructor
+/// checks for interior NUL characters.
+///
+/// # Panics
+///
+/// Panics if the string is not null-terminated.
+#[inline]
+pub fn from_static_str(s: &'static str) -> &'static CStr {
+    assert!(s.ends_with("\0"),
+            "static string is not null-terminated: \"{}\"", s);
+    let p = s.as_ptr() as *const CStr;
+    unsafe { std::mem::copy_lifetime(s, &*p) }
+}
 
+/// Constructs a `CStr` reference from a raw pointer to a
+/// null-terminated string.
+///
+/// The second parameter provides the lifetime for the returned reference;
+/// its value is ignored.
+///
+/// # Panics
+///
+/// Panics if the pointer is null.
+pub unsafe fn from_raw_ptr<'a, T: ?Sized>(ptr: *const libc::c_char,
+                                          life_anchor: &'a T)
+                                          -> &'a CStr
+{
+    assert!(!ptr.is_null());
+    std::mem::copy_lifetime(life_anchor, &*(ptr as *const CStr))
+}
+
+impl CStr {
     /// Returns a raw pointer to the null-terminated C string.
     ///
-    /// The returned pointer is internal to the `CStrArg` value,
-    /// therefore it is invalidated when the value is dropped.
+    /// The returned pointer can only be considered to be valid
+    /// during the lifetime of the `CStr` value.
     pub fn as_ptr(&self) -> *const libc::c_char {
-        match self.data {
-            CStrData::Static(s)      => s.as_ptr() as *const libc::c_char,
-            CStrData::Owned(ref v)   => v.as_ptr() as *const libc::c_char,
-            CStrData::InPlace(ref a) => a.as_ptr() as *const libc::c_char
+        &self.lead as *const libc::c_char
+    }
+
+    /// Returns an iterator over the string's bytes.
+    pub fn iter<'a>(&'a self) -> CChars<'a> {
+        CChars {
+            ptr: self.as_ptr(),
+            lifetime: marker::ContravariantLifetime
         }
     }
 }
 
-/// A generic trait for transforming data into C string in-parameter values.
+impl Deref for CStrBuf {
+
+    type Target = CStr;
+
+    fn deref(&self) -> &CStr {
+        let p = match self.data {
+            CStrData::Owned(ref v)   => (*v).as_ptr(),
+            CStrData::InPlace(ref a) => a.as_ptr()
+        } as *const CStr;
+        unsafe { mem::copy_lifetime(self, &*p) }
+    }
+}
+
+/// A generic trait for transforming data into C strings.
 ///
 /// Depending on the implementation, the conversion may avoid allocation
 /// and copying of the string buffer.
 pub trait IntoCStr {
 
-    /// Transforms the receiver into a `CStrArg`.
+    /// Transforms the receiver into a `CStrBuf`.
     ///
     /// # Failure
     ///
     /// Returns `Err` if the receiver contains an interior NUL byte.
-    fn into_c_str(self) -> Result<CStrArg, CStrError>;
+    fn into_c_str(self) -> Result<CStrBuf, CStrError>;
 
-    /// Transforms the receiver into a `CStrArg`
+    /// Transforms the receiver into a `CStrBuf`
     /// without checking for interior NUL bytes.
-    unsafe fn into_c_str_unchecked(self) -> CStrArg;
+    unsafe fn into_c_str_unchecked(self) -> CStrBuf;
 }
 
 impl<'a> IntoCStr for &'a [u8] {
 
     #[inline]
-    fn into_c_str(self) -> Result<CStrArg, CStrError> {
-        CStrArg::from_bytes(self)
+    fn into_c_str(self) -> Result<CStrBuf, CStrError> {
+        CStrBuf::from_bytes(self)
     }
 
     #[inline]
-    unsafe fn into_c_str_unchecked(self) -> CStrArg {
-        CStrArg::from_bytes_unchecked(self)
+    unsafe fn into_c_str_unchecked(self) -> CStrBuf {
+        CStrBuf::from_bytes_unchecked(self)
     }
 }
 
 impl<'a> IntoCStr for &'a str {
 
     #[inline]
-    fn into_c_str(self) -> Result<CStrArg, CStrError> {
-        CStrArg::from_str(self)
+    fn into_c_str(self) -> Result<CStrBuf, CStrError> {
+        CStrBuf::from_str(self)
     }
 
     #[inline]
-    unsafe fn into_c_str_unchecked(self) -> CStrArg {
-        CStrArg::from_str_unchecked(self)
+    unsafe fn into_c_str_unchecked(self) -> CStrBuf {
+        CStrBuf::from_str_unchecked(self)
     }
 }
 
 impl IntoCStr for Vec<u8> {
 
-    fn into_c_str(self) -> Result<CStrArg, CStrError> {
+    fn into_c_str(self) -> Result<CStrBuf, CStrError> {
         if let Some(pos) = self.as_slice().position_elem(&NUL) {
             return Err(CStrError::ContainsNul(pos));
         }
         Ok(vec_into_c_str(self))
     }
 
-    unsafe fn into_c_str_unchecked(self) -> CStrArg {
+    unsafe fn into_c_str_unchecked(self) -> CStrBuf {
         vec_into_c_str(self)
     }
 }
@@ -542,12 +585,12 @@ impl IntoCStr for Vec<u8> {
 impl IntoCStr for String {
 
     #[inline]
-    fn into_c_str(self) -> Result<CStrArg, CStrError> {
+    fn into_c_str(self) -> Result<CStrBuf, CStrError> {
         self.into_bytes().into_c_str()
     }
 
     #[inline]
-    unsafe fn into_c_str_unchecked(self) -> CStrArg {
+    unsafe fn into_c_str_unchecked(self) -> CStrBuf {
         self.into_bytes().into_c_str_unchecked()
     }
 }
@@ -561,25 +604,6 @@ impl IntoCStr for String {
 pub struct CChars<'a> {
     ptr: *const libc::c_char,
     lifetime: marker::ContravariantLifetime<'a>,
-}
-
-impl<'a> CChars<'a> {
-
-    /// Constructs a `CChars` iterator from a raw pointer to a
-    /// null-terminated string.
-    ///
-    /// The second parameter provides the lifetime for the returned iterator.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the pointer is null.
-    pub unsafe fn from_raw_ptr<T: ?Sized>(ptr: *const libc::c_char,
-                                          _life_anchor: &'a T)
-                                         -> CChars<'a>
-    {
-        assert!(!ptr.is_null());
-        CChars { ptr: ptr, lifetime: marker::ContravariantLifetime }
-    }
 }
 
 impl<'a> Copy for CChars<'a> { }
@@ -632,11 +656,11 @@ pub unsafe fn parse_c_multistring<F>(buf: *const libc::c_char,
 
 #[cfg(test)]
 mod testutil {
-    use super::CStrArg;
+    use super::CStr;
     use std::iter::range;
 
     #[inline]
-    pub fn check_c_str(c_str: &CStrArg, expected: &[u8]) {
+    pub fn check_c_str(c_str: &CStr, expected: &[u8]) {
         let buf = c_str.as_ptr();
         let len = expected.len();
         for i in range(0, len) {
@@ -655,7 +679,7 @@ mod tests {
     use libc;
     use super::testutil::check_c_str;
 
-    use super::{CString, CStrArg, IntoCStr, CChars, LibcDtor};
+    use super::{CString, IntoCStr, LibcDtor};
     use super::parse_c_multistring;
 
     fn bytes_dup(s: &[u8]) -> CString<LibcDtor> {
@@ -691,7 +715,7 @@ mod tests {
     #[test]
     fn test_c_str_macro() {
         let c_str = c_str!("hello");
-        check_c_str(&c_str, b"hello");
+        check_c_str(c_str, b"hello");
     }
 
     fn test_into_c_str<Src>(sources: Vec<Src>,
@@ -702,9 +726,9 @@ mod tests {
         let mut i = 0;
         for src in sources.into_iter() {
             let c_str = src.clone().into_c_str().unwrap();
-            check_c_str(&c_str, expected[i]);
+            check_c_str(&*c_str, expected[i]);
             let c_str = unsafe { src.into_c_str_unchecked() };
-            check_c_str(&c_str, expected[i]);
+            check_c_str(&*c_str, expected[i]);
             i += 1;
         }
 
@@ -836,15 +860,15 @@ mod tests {
 
     #[test]
     #[should_fail]
-    fn test_c_str_arg_from_static_bytes_fail() {
-        let _c_str = CStrArg::from_static_bytes(b"no nul\xFF");
+    fn test_from_static_bytes_fail() {
+        let _c_str = super::from_static_bytes(b"no nul");
     }
 
     #[test]
     #[should_fail]
-    fn test_chars_constructor_fail() {
+    fn test_from_raw_ptr_fail() {
         let p: *const libc::c_char = ptr::null();
-        let _chars = unsafe { CChars::from_raw_ptr(p, &p) };
+        let _c_str = unsafe { super::from_raw_ptr(p, &p) };
     }
 }
 
@@ -858,13 +882,13 @@ mod bench {
     #[inline]
     fn check_into_c_str<Src>(s: Src, expected: &str) where Src: IntoCStr {
         let c_str = s.into_c_str().unwrap();
-        check_c_str(&c_str, expected.as_bytes());
+        check_c_str(&*c_str, expected.as_bytes());
     }
 
     #[inline]
     fn check_into_c_str_unchecked<Src>(s: Src, expected: &str) where Src: IntoCStr {
         let c_str = unsafe { s.into_c_str_unchecked() };
-        check_c_str(&c_str, expected.as_bytes());
+        check_c_str(&*c_str, expected.as_bytes());
     }
 
     static S_SHORT: &'static str = "Mary";
