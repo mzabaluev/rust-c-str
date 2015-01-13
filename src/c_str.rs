@@ -829,7 +829,7 @@ mod tests {
     }
 
     #[test]
-    fn test_c_str_parse_as_bytes() {
+    fn test_c_string_parse_as_bytes() {
         let c_str = str_dup("hello");
         assert_eq!(c_str.parse_as_bytes(), b"hello");
         let c_str = str_dup("");
@@ -839,7 +839,7 @@ mod tests {
     }
 
     #[test]
-    fn test_c_str_parse_as_utf8() {
+    fn test_c_string_parse_as_utf8() {
         let c_str = str_dup("hello");
         assert_eq!(c_str.parse_as_utf8(), Ok("hello"));
         let c_str = str_dup("");
