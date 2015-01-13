@@ -336,22 +336,38 @@ pub struct CStr {
 }
 
 fn bytes_into_c_str(s: &[u8]) -> CStrBuf {
-    copy_in_place(s).unwrap_or(long_vec_into_c_str(s.to_vec()))
+    let mut out = CStrBuf {
+        data: CStrData::InPlace(unsafe { mem::uninitialized() })
+    };
+    if !copy_in_place(s, &mut out.data) {
+        out = long_vec_into_c_str(s.to_vec());
+    }
+    out
 }
 
 fn vec_into_c_str(v: Vec<u8>) -> CStrBuf {
-    copy_in_place(v.as_slice()).unwrap_or(long_vec_into_c_str(v))
+    let mut out = CStrBuf {
+        data: CStrData::InPlace(unsafe { mem::uninitialized() })
+    };
+    if !copy_in_place(v.as_slice(), &mut out.data) {
+        out = long_vec_into_c_str(v);
+    }
+    out
 }
 
-fn copy_in_place(s: &[u8]) -> Option<CStrBuf> {
+fn copy_in_place(s: &[u8], out: &mut CStrData) -> bool {
     let len = s.len();
-    if len < IN_PLACE_SIZE {
-        let mut buf: [u8; IN_PLACE_SIZE] = unsafe { mem::uninitialized() };
-        slice::bytes::copy_memory(&mut buf, s);
-        buf[len] = 0;
-        return Some(CStrBuf { data: CStrData::InPlace(buf) });
+    if len >= IN_PLACE_SIZE {
+        return false;
     }
-    None
+    match *out {
+        CStrData::InPlace(ref mut buf) => {
+            slice::bytes::copy_memory(buf, s);
+            buf[len] = 0;
+        }
+        _ => unreachable!()
+    }
+    true
 }
 
 fn long_vec_into_c_str(mut v: Vec<u8>) -> CStrBuf {
