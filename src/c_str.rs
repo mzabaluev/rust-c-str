@@ -310,12 +310,12 @@ impl fmt::Show for CStrError {
     }
 }
 
-const IN_PLACE_LEN: usize = 15;
+const IN_PLACE_SIZE: usize = 24;
 
 #[derive(Clone)]
 enum CStrData {
     Owned(Vec<u8>),
-    InPlace([u8; IN_PLACE_LEN + 1])
+    InPlace([u8; IN_PLACE_SIZE])
 }
 
 /// An adaptor type to pass C string data to foreign functions.
@@ -345,8 +345,8 @@ fn vec_into_c_str(v: Vec<u8>) -> CStrBuf {
 
 fn copy_in_place(s: &[u8]) -> Option<CStrBuf> {
     let len = s.len();
-    if len <= IN_PLACE_LEN {
-        let mut buf: [u8; IN_PLACE_LEN + 1] = unsafe { mem::uninitialized() };
+    if len < IN_PLACE_SIZE {
+        let mut buf: [u8; IN_PLACE_SIZE] = unsafe { mem::uninitialized() };
         slice::bytes::copy_memory(&mut buf, s);
         buf[len] = 0;
         return Some(CStrBuf { data: CStrData::InPlace(buf) });
@@ -737,8 +737,8 @@ mod tests {
 
     #[test]
     fn test_bytes_into_c_str() {
-        test_into_c_str(vec!(b"", b"hello", b"foo\xFF", b"Mary had a little lamb"),
-                        &[b"", b"hello", b"foo\xFF", b"Mary had a little lamb"],
+        test_into_c_str(vec!(b"", b"hello", b"foo\xFF", b"Mary had a little lamb, Little lamb"),
+                        &[b"", b"hello", b"foo\xFF", b"Mary had a little lamb, Little lamb"],
                         b"he\x00llo");
     }
 
@@ -892,7 +892,7 @@ mod bench {
     }
 
     static S_SHORT: &'static str = "Mary";
-    static S_MEDIUM: &'static str = "Mary had a little lamb";
+    static S_MEDIUM: &'static str = "Mary had a little lamb, Little lamb";
     static S_LONG: &'static str = "\
         Mary had a little lamb, Little lamb
         Mary had a little lamb, Little lamb
