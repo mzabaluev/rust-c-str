@@ -582,6 +582,8 @@ impl<'a> CChars<'a> {
     }
 }
 
+impl<'a> Copy for CChars<'a> { }
+
 impl<'a> Iterator for CChars<'a> {
 
     type Item = libc::c_char;
