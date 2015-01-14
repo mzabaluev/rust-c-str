@@ -670,11 +670,14 @@ pub unsafe fn parse_c_multistring<F>(buf: *const libc::c_char,
 }
 
 #[cfg(test)]
-mod testutil {
-    use super::CStr;
-    use std::iter::range;
+mod tests {
+    use std::iter::{Iterator, range};
+    use std::ptr;
+    use libc;
 
-    #[inline]
+    use super::{CStr, CString, IntoCStr, LibcDtor};
+    use super::parse_c_multistring;
+
     pub fn check_c_str(c_str: &CStr, expected: &[u8]) {
         let buf = c_str.as_ptr();
         let len = expected.len();
@@ -685,17 +688,6 @@ mod testutil {
         let term = unsafe { *buf.offset(len as isize) as u8 };
         assert_eq!(term, 0);
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::iter::Iterator;
-    use std::ptr;
-    use libc;
-    use super::testutil::check_c_str;
-
-    use super::{CString, IntoCStr, LibcDtor};
-    use super::parse_c_multistring;
 
     fn bytes_dup(s: &[u8]) -> CString<LibcDtor> {
         let len = s.len();
@@ -890,20 +882,27 @@ mod tests {
 #[cfg(test)]
 mod bench {
     use test::Bencher;
-    use super::testutil::check_c_str;
 
-    use super::IntoCStr;
+    use super::{CStr, IntoCStr};
 
-    #[inline]
-    fn check_into_c_str<Src>(s: Src, expected: &str) where Src: IntoCStr {
-        let c_str = s.into_c_str().unwrap();
-        check_c_str(&*c_str, expected.as_bytes());
+    #[inline(always)]
+    fn smoke_c_str(s: &CStr, expected: &str) {
+        let p = s.as_ptr();
+        let off = expected.len() / 2;
+        let c = unsafe { *p.offset(off as isize) } as u8;
+        assert_eq!(c, expected.as_bytes()[off]);
     }
 
-    #[inline]
-    fn check_into_c_str_unchecked<Src>(s: Src, expected: &str) where Src: IntoCStr {
+    #[inline(always)]
+    fn bench_into_c_str<Src>(s: Src, expected: &str) where Src: IntoCStr {
+        let c_str = s.into_c_str().unwrap();
+        smoke_c_str(&*c_str, expected);
+    }
+
+    #[inline(always)]
+    fn bench_into_c_str_unchecked<Src>(s: Src, expected: &str) where Src: IntoCStr {
         let c_str = unsafe { s.into_c_str_unchecked() };
-        check_c_str(&*c_str, expected.as_bytes());
+        smoke_c_str(&*c_str, expected);
     }
 
     static S_SHORT: &'static str = "Mary";
@@ -922,7 +921,7 @@ mod bench {
 
     fn bench_str_into_c_str(b: &mut Bencher, s: &str) {
         b.iter(|| {
-            check_into_c_str(s.to_string().as_slice(), s);
+            bench_into_c_str(s.to_string().as_slice(), s);
         })
     }
 
@@ -943,7 +942,7 @@ mod bench {
 
     fn bench_str_into_c_str_unchecked(b: &mut Bencher, s: &str) {
         b.iter(|| {
-            check_into_c_str_unchecked(s.to_string().as_slice(), s);
+            bench_into_c_str_unchecked(s.to_string().as_slice(), s);
         })
     }
 
@@ -964,7 +963,7 @@ mod bench {
 
     fn bench_string_into_c_str(b: &mut Bencher, s: &str) {
         b.iter(|| {
-            check_into_c_str(s.to_string(), s);
+            bench_into_c_str(s.to_string(), s);
         })
     }
 
@@ -985,7 +984,7 @@ mod bench {
 
     fn bench_string_into_c_str_unchecked(b: &mut Bencher, s: &str) {
         b.iter(|| {
-            check_into_c_str_unchecked(s.to_string(), s);
+            bench_into_c_str_unchecked(s.to_string(), s);
         })
     }
 
