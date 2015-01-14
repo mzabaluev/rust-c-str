@@ -698,7 +698,7 @@ mod tests {
     fn bytes_dup(s: &[u8]) -> CString<LibcDtor> {
         let len = s.len();
         unsafe {
-            let dup = libc::malloc(len as libc::size_t) as *mut u8;
+            let dup = libc::malloc((len + 1) as libc::size_t) as *mut u8;
             ptr::copy_nonoverlapping_memory(dup, s.as_ptr(), len);
             *dup.offset(len as isize) = 0;
             CString::from_raw_buf(dup as *const i8)
