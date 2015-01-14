@@ -883,7 +883,7 @@ mod tests {
 mod bench {
     use test::Bencher;
 
-    use super::{CStr, IntoCStr};
+    use super::{CStr, CStrBuf, IntoCStr};
 
     #[inline(always)]
     fn smoke_c_str(s: &CStr, expected: &str) {
@@ -914,6 +914,50 @@ mod bench {
         Mary had a little lamb, Little lamb
         Mary had a little lamb, Little lamb
         Mary had a little lamb, Little lamb";
+
+    fn bench_c_str_buf_from_str(b: &mut Bencher, s: &str) {
+        b.iter(|| {
+            let c_str = CStrBuf::from_str(s).unwrap();
+            smoke_c_str(&*c_str, s);
+        });
+    }
+
+    #[bench]
+    fn bench_c_str_buf_from_str_short(b: &mut Bencher) {
+        bench_c_str_buf_from_str(b, S_SHORT);
+    }
+
+    #[bench]
+    fn bench_c_str_buf_from_str_medium(b: &mut Bencher) {
+        bench_c_str_buf_from_str(b, S_MEDIUM);
+    }
+
+    #[bench]
+    fn bench_c_str_buf_from_str_long(b: &mut Bencher) {
+        bench_c_str_buf_from_str(b, S_LONG);
+    }
+
+    fn bench_c_str_buf_from_str_unchecked(b: &mut Bencher, s: &str) {
+        b.iter(|| {
+            let c_str = unsafe { CStrBuf::from_str_unchecked(s) };
+            smoke_c_str(&*c_str, s);
+        });
+    }
+
+    #[bench]
+    fn bench_c_str_buf_from_str_unchecked_short(b: &mut Bencher) {
+        bench_c_str_buf_from_str_unchecked(b, S_SHORT);
+    }
+
+    #[bench]
+    fn bench_c_str_buf_from_str_unchecked_medium(b: &mut Bencher) {
+        bench_c_str_buf_from_str_unchecked(b, S_MEDIUM);
+    }
+
+    #[bench]
+    fn bench_c_str_buf_from_str_unchecked_long(b: &mut Bencher) {
+        bench_c_str_buf_from_str_unchecked(b, S_LONG);
+    }
 
     // When benchmarking conversion from borrowed values, make a copy
     // for every iteration to equalize the work external to the
