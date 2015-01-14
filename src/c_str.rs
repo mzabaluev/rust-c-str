@@ -469,7 +469,7 @@ pub fn from_static_bytes(bytes: &'static [u8]) -> &'static CStr {
             "static byte string is not null-terminated: \"{}\"",
             escape_bytestring(bytes));
     let p = bytes.as_ptr() as *const CStr;
-    unsafe { std::mem::copy_lifetime(bytes, &*p) }
+    unsafe { mem::copy_lifetime(bytes, &*p) }
 }
 
 /// Create a `CStr` reference out of a static string.
@@ -486,7 +486,7 @@ pub fn from_static_str(s: &'static str) -> &'static CStr {
     assert!(s.ends_with("\0"),
             "static string is not null-terminated: \"{}\"", s);
     let p = s.as_ptr() as *const CStr;
-    unsafe { std::mem::copy_lifetime(s, &*p) }
+    unsafe { mem::copy_lifetime(s, &*p) }
 }
 
 /// Constructs a `CStr` reference from a raw pointer to a
@@ -511,11 +511,13 @@ impl CStr {
     ///
     /// The returned pointer can only be considered to be valid
     /// during the lifetime of the `CStr` value.
+    #[inline]
     pub fn as_ptr(&self) -> *const libc::c_char {
         &self.lead as *const libc::c_char
     }
 
     /// Returns an iterator over the string's bytes.
+    #[inline]
     pub fn iter<'a>(&'a self) -> CChars<'a> {
         CChars {
             ptr: self.as_ptr(),
