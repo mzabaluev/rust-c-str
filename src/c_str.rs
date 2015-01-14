@@ -246,6 +246,11 @@ impl<D> CString<D> where D: Dtor {
         str::from_utf8(self.parse_as_bytes())
     }
 
+    /// Coerces the recipient to a `CStr` reference.
+    pub fn as_c_str(&self) -> &CStr {
+        unsafe { from_raw_ptr(self.ptr, self) }
+    }
+
     /// Return a raw pointer to the null-terminated string data.
     ///
     /// `.as_ptr` returns an internal pointer into the `CString`, and
@@ -254,14 +259,6 @@ impl<D> CString<D> where D: Dtor {
     /// one).
     pub fn as_ptr(&self) -> *const libc::c_char {
         self.ptr
-    }
-
-    /// Returns an iterator over the string's bytes.
-    pub fn iter<'a>(&'a self) -> CChars<'a> {
-        CChars {
-            ptr: self.ptr,
-            lifetime: marker::ContravariantLifetime,
-        }
     }
 
     /// Returns true if the wrapped string is empty.
@@ -788,12 +785,12 @@ mod tests {
 
     #[test]
     fn test_iterator() {
-        let c_str = str_dup("");
-        let mut iter = c_str.iter();
+        let c_string = str_dup("");
+        let mut iter = c_string.as_c_str().iter();
         assert_eq!(iter.next(), None);
 
-        let c_str = str_dup("hello");
-        let mut iter = c_str.iter();
+        let c_string = str_dup("hello");
+        let mut iter = c_string.as_c_str().iter();
         assert_eq!(iter.next(), Some('h' as libc::c_char));
         assert_eq!(iter.next(), Some('e' as libc::c_char));
         assert_eq!(iter.next(), Some('l' as libc::c_char));
