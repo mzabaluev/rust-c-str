@@ -272,7 +272,7 @@ impl<D> fmt::Show for CString<D> where D: Dtor {
 }
 
 /// Errors which can occur when attempting to convert data to a C string.
-#[derive(Copy)]
+#[derive(Copy, Eq, PartialEq)]
 pub enum CStrError {
 
     /// The source string or a byte sequence contains a NUL byte.
