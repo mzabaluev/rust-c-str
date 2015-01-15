@@ -260,9 +260,6 @@ impl<D> CString<D> where D: Dtor {
     pub fn as_ptr(&self) -> *const libc::c_char {
         self.ptr
     }
-
-    /// Returns true if the wrapped string is empty.
-    pub fn is_empty(&self) -> bool { unsafe { *self.ptr == 0 } }
 }
 
 impl<D> fmt::Show for CString<D> where D: Dtor {
@@ -545,6 +542,10 @@ impl CStr {
             lifetime: marker::ContravariantLifetime
         }
     }
+
+    /// Returns true if the wrapped string is empty.
+    #[inline]
+    pub fn is_empty(&self) -> bool { self.lead == 0 }
 }
 
 impl Deref for CStrBuf {
@@ -859,6 +860,12 @@ mod tests {
         let c_str = CStrBuf::from_bytes(b"Mary had a little \xD0\x0D, Little \xD0\x0D").unwrap();
         let vec = c_str.into_vec();
         assert_eq!(vec.as_slice(), b"Mary had a little \xD0\x0D, Little \xD0\x0D");
+    }
+
+    #[test]
+    fn test_c_str_is_empty() {
+        let c_str = CStrBuf::from_str("").unwrap();
+        assert!(c_str.is_empty());
     }
 
     #[test]
