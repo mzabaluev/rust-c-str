@@ -13,7 +13,7 @@ use std::iter::{Iterator, range};
 use std::ptr;
 use libc;
 
-use super::{CStr, CStrBuf, CStrError, CString, IntoCStr};
+use super::{CStr, CStrBuf, CStrError, OwnedCString, IntoCStr};
 use super::{libc_free, parse_c_multistring};
 
 pub fn check_c_str(c_str: &CStr, expected: &[u8]) {
@@ -35,13 +35,13 @@ unsafe fn bytes_dup_raw(s: &[u8]) -> *const libc::c_char {
     dup as *const libc::c_char
 }
 
-fn bytes_dup(s: &[u8]) -> CString {
+fn bytes_dup(s: &[u8]) -> OwnedCString {
     unsafe {
-        CString::new(bytes_dup_raw(s), libc_free)
+        OwnedCString::new(bytes_dup_raw(s), libc_free)
     }
 }
 
-fn str_dup(s: &str) -> CString {
+fn str_dup(s: &str) -> OwnedCString {
     bytes_dup(s.as_bytes())
 }
 
@@ -267,8 +267,8 @@ fn test_parse_null_as_utf8_fail() {
 #[test]
 #[should_fail]
 fn test_c_string_new_fail() {
-    let _c_str: CString = unsafe {
-        CString::new(ptr::null(), libc_free)
+    let _c_str: OwnedCString = unsafe {
+        OwnedCString::new(ptr::null(), libc_free)
     };
 }
 

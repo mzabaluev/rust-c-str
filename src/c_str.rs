@@ -25,7 +25,7 @@
 //!
 //! # Managing foreign-allocated C strings
 //!
-//! An allocated C string is managed through the type `CString`.
+//! An allocated C string is managed through the type `OwnedCString`.
 //! Values of this type "own" an internal buffer of characters and will call
 //! a destructor when the value is dropped.
 //!
@@ -124,19 +124,19 @@ pub unsafe fn parse_as_utf8<'a, T: ?Sized>(raw: *const libc::c_char,
 ///
 /// This structure wraps a raw pointer to a null-terminated C string
 /// and a destructor function to invoke when dropped.
-pub struct CString {
+pub struct OwnedCString {
     ptr: *const libc::c_char,
     dtor: Destroy
 }
 
-impl Drop for CString {
+impl Drop for OwnedCString {
     fn drop(&mut self) {
         let dtor = self.dtor;
         unsafe { dtor(self.ptr) };
     }
 }
 
-impl Deref for CString {
+impl Deref for OwnedCString {
 
     type Target = CStr;
 
@@ -145,30 +145,30 @@ impl Deref for CString {
     }
 }
 
-impl PartialEq for CString {
-    fn eq(&self, other: &CString) -> bool {
+impl PartialEq for OwnedCString {
+    fn eq(&self, other: &OwnedCString) -> bool {
         unsafe { libc::strcmp(self.ptr, other.ptr) == 0 }
     }
 }
 
-impl Eq for CString {
+impl Eq for OwnedCString {
 }
 
-impl PartialOrd for CString {
+impl PartialOrd for OwnedCString {
     #[inline]
-    fn partial_cmp(&self, other: &CString) -> Option<Ordering> {
+    fn partial_cmp(&self, other: &OwnedCString) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for CString {
-    fn cmp(&self, other: &CString) -> Ordering {
+impl Ord for OwnedCString {
+    fn cmp(&self, other: &OwnedCString) -> Ordering {
         let res = unsafe { libc::strcmp(self.ptr, other.ptr) };
         res.cmp(&(0 as libc::c_int))
     }
 }
 
-impl<H> hash::Hash<H> for CString
+impl<H> hash::Hash<H> for OwnedCString
     where H: hash::Hasher, H: hash::Writer
 {
     fn hash(&self, state: &mut H) {
@@ -176,7 +176,7 @@ impl<H> hash::Hash<H> for CString
     }
 }
 
-/// Signature for deallocation functions used with `CString::new`.
+/// Signature for deallocation functions used with `OwnedCString::new`.
 pub type Destroy = unsafe fn(*const libc::c_char);
 
 /// The deallocation function that delegates to `libc::free`.
@@ -184,18 +184,18 @@ pub unsafe fn libc_free(ptr: *const libc::c_char) {
     libc::free(ptr as *mut libc::c_void);
 }
 
-impl CString {
+impl OwnedCString {
 
-    /// Create a `CString` from a raw pointer and a destructor.
+    /// Create an `OwnedCString` from a raw pointer and a destructor.
     ///
-    /// The destructor will be invoked when the `CString` is dropped.
+    /// The destructor will be invoked when the `OwnedCString` is dropped.
     ///
     ///# Panics
     ///
     /// Panics if `ptr` is null.
-    pub unsafe fn new(ptr: *const libc::c_char, dtor: Destroy) -> CString {
+    pub unsafe fn new(ptr: *const libc::c_char, dtor: Destroy) -> OwnedCString {
         assert!(!ptr.is_null());
-        CString { ptr: ptr, dtor: dtor }
+        OwnedCString { ptr: ptr, dtor: dtor }
     }
 
     /// Scans the string to get a byte slice of its contents.
@@ -219,7 +219,7 @@ impl CString {
     }
 }
 
-impl fmt::Show for CString {
+impl fmt::Show for OwnedCString {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", String::from_utf8_lossy(self.parse_as_bytes()))
     }
