@@ -126,7 +126,7 @@ pub unsafe fn parse_as_utf8<'a, T: ?Sized>(raw: *const libc::c_char,
 /// and a destructor function to invoke when dropped.
 pub struct OwnedCString {
     ptr: *const libc::c_char,
-    dtor: Destroy
+    dtor: DestroyFn
 }
 
 impl Drop for OwnedCString {
@@ -177,7 +177,7 @@ impl<H> hash::Hash<H> for OwnedCString
 }
 
 /// Signature for deallocation functions used with `OwnedCString::new`.
-pub type Destroy = unsafe fn(*const libc::c_char);
+pub type DestroyFn = unsafe fn(*const libc::c_char);
 
 /// The deallocation function that delegates to `libc::free`.
 pub unsafe fn libc_free(ptr: *const libc::c_char) {
@@ -193,7 +193,7 @@ impl OwnedCString {
     ///# Panics
     ///
     /// Panics if `ptr` is null.
-    pub unsafe fn new(ptr: *const libc::c_char, dtor: Destroy) -> OwnedCString {
+    pub unsafe fn new(ptr: *const libc::c_char, dtor: DestroyFn) -> OwnedCString {
         assert!(!ptr.is_null());
         OwnedCString { ptr: ptr, dtor: dtor }
     }
