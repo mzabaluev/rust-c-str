@@ -307,19 +307,27 @@ impl fmt::Show for CStrError {
     }
 }
 
+/// Signature for deallocation functions used with
+/// `CStrBuf::from_raw_with_dtor`.
+pub type Destroy = unsafe fn(*const libc::c_char);
+
+/// The deallocation function that delegates to `libc::free`.
+pub unsafe fn libc_free(ptr: *const libc::c_char) {
+    libc::free(ptr as *mut libc::c_void);
+}
+
 const IN_PLACE_SIZE: usize = 24;
 
-#[derive(Clone)]
 enum CStrData {
     Owned(Vec<u8>),
-    InPlace([u8; IN_PLACE_SIZE])
+    InPlace([u8; IN_PLACE_SIZE]),
+    CAlloc(*const libc::c_char, Destroy)
 }
 
 /// An adaptor type to pass C string data to foreign functions.
 ///
 /// Values of this type can be obtained by conversion from Rust strings and
 /// byte slices.
-#[derive(Clone)]
 pub struct CStrBuf {
     data: CStrData
 }
@@ -334,7 +342,7 @@ pub struct CStr {
 
 fn bytes_into_c_str(s: &[u8]) -> CStrBuf {
     let mut out = CStrBuf {
-        data: CStrData::InPlace(unsafe { mem::uninitialized() })
+        data: unsafe { blank_str_data() }
     };
     if !copy_in_place(s, &mut out.data) {
         out = long_vec_into_c_str(s.to_vec());
@@ -344,12 +352,17 @@ fn bytes_into_c_str(s: &[u8]) -> CStrBuf {
 
 fn vec_into_c_str(v: Vec<u8>) -> CStrBuf {
     let mut out = CStrBuf {
-        data: CStrData::InPlace(unsafe { mem::uninitialized() })
+        data: unsafe { blank_str_data() }
     };
     if !copy_in_place(v.as_slice(), &mut out.data) {
         out = long_vec_into_c_str(v);
     }
     out
+}
+
+#[inline]
+unsafe fn blank_str_data() -> CStrData {
+    CStrData::InPlace(mem::uninitialized())
 }
 
 fn copy_in_place(s: &[u8], out: &mut CStrData) -> bool {
@@ -452,6 +465,77 @@ impl CStrBuf {
     pub unsafe fn from_str_unchecked(s: &str) -> CStrBuf {
         CStrBuf::from_bytes_unchecked(s.as_bytes())
     }
+
+    /// Create a `CStrBuf` from a raw pointer and a destructor function.
+    ///
+    /// The function will be called when the `CStrBuf` value is dropped.
+    pub unsafe fn from_raw_with_dtor(ptr: *const libc::c_char,
+                                     dtor: Destroy)
+                                    -> CStrBuf
+    {
+        CStrBuf { data: CStrData::CAlloc(ptr, dtor) }
+    }
+
+    /// Returns the contents of the `CStrBuf` as a byte slice.
+    ///
+    /// This operation may need to parse the string data in order
+    /// to find the terminating null byte.
+    /// The returned slice does not include the terminating NUL.
+    pub fn parse_as_bytes(&self) -> &[u8] {
+        match self.data {
+            CStrData::Owned(ref v) => &v[.. v.len() - 1],
+            CStrData::InPlace(ref a) => &a[.. a.position_elem(&NUL).unwrap()],
+            CStrData::CAlloc(p, _) => unsafe { parse_as_bytes(p, self) }
+        }
+    }
+
+    /// Returns the contents of the `CStrBuf` as a UTF-8 string slice.
+    ///
+    /// This operation parses and validates the string data.
+    ///
+    /// # Failure
+    ///
+    /// Returns `Err` if the string is not valid UTF-8.
+    #[inline]
+    pub fn parse_as_utf8(&self) -> Result<&str, str::Utf8Error> {
+        str::from_utf8(self.parse_as_bytes())
+    }
+
+    /// Converts `self` into a byte vector, potentially saving an allocation.
+    pub fn into_vec(mut self) -> Vec<u8> {
+        let mut data = unsafe { blank_str_data() };
+        mem::swap(&mut self.data, &mut data);
+        match data {
+            CStrData::Owned(mut v) => {
+                let len = v.len() - 1;
+                v.truncate(len);
+                v
+            }
+            CStrData::InPlace(ref a) => {
+                a[.. a.position_elem(&NUL).unwrap()].to_vec()
+            }
+            CStrData::CAlloc(p, _) => {
+                let bytes = unsafe { parse_as_bytes(p, &p) };
+                bytes.to_vec()
+            }
+        }
+    }
+}
+
+impl Drop for CStrBuf {
+    fn drop(&mut self) {
+        if let CStrData::CAlloc(ptr, dtor) = self.data {
+            unsafe { dtor(ptr) }
+        }
+    }
+}
+
+impl Clone for CStrBuf {
+    #[inline]
+    fn clone(&self) -> CStrBuf {
+        let bytes = self.parse_as_bytes();
+        unsafe { CStrBuf::from_bytes_unchecked(bytes) }
+    }
 }
 
 /// Create a `CStr` reference out of a static byte array.
@@ -533,7 +617,8 @@ impl Deref for CStrBuf {
     fn deref(&self) -> &CStr {
         let p = match self.data {
             CStrData::Owned(ref v)   => (*v).as_ptr(),
-            CStrData::InPlace(ref a) => a.as_ptr()
+            CStrData::InPlace(ref a) => a.as_ptr(),
+            CStrData::CAlloc(p, _) => p as *const u8
         } as *const CStr;
         unsafe { mem::copy_lifetime(self, &*p) }
     }
@@ -675,8 +760,8 @@ mod tests {
     use std::ptr;
     use libc;
 
-    use super::{CStr, CString, IntoCStr, LibcDtor};
-    use super::parse_c_multistring;
+    use super::{CStr, CStrBuf, CStrError, CString, IntoCStr, LibcDtor};
+    use super::{libc_free, parse_c_multistring};
 
     pub fn check_c_str(c_str: &CStr, expected: &[u8]) {
         let buf = c_str.as_ptr();
@@ -689,13 +774,17 @@ mod tests {
         assert_eq!(term, 0);
     }
 
-    fn bytes_dup(s: &[u8]) -> CString<LibcDtor> {
+    unsafe fn bytes_dup_raw(s: &[u8]) -> *const libc::c_char {
         let len = s.len();
+        let dup = libc::malloc((len + 1) as libc::size_t) as *mut u8;
+        ptr::copy_nonoverlapping_memory(dup, s.as_ptr(), len);
+        *dup.offset(len as isize) = 0;
+        dup as *const libc::c_char
+    }
+
+    fn bytes_dup(s: &[u8]) -> CString<LibcDtor> {
         unsafe {
-            let dup = libc::malloc((len + 1) as libc::size_t) as *mut u8;
-            ptr::copy_nonoverlapping_memory(dup, s.as_ptr(), len);
-            *dup.offset(len as isize) = 0;
-            CString::from_raw_buf(dup as *const i8)
+            CString::from_raw_buf(bytes_dup_raw(s))
         }
     }
 
@@ -778,6 +867,15 @@ mod tests {
     }
 
     #[test]
+    fn test_from_raw() {
+        let c_str = unsafe {
+            let ptr = bytes_dup_raw(b"hello");
+            CStrBuf::from_raw_with_dtor(ptr, libc_free)
+        };
+        check_c_str(&*c_str, b"hello");
+    }
+
+    #[test]
     fn test_iterator() {
         let c_string = str_dup("");
         let mut iter = c_string.as_c_str().iter();
@@ -817,6 +915,94 @@ mod tests {
         let c_str = bytes_dup(b"foo\xFF");
         let res = unsafe { super::parse_as_utf8(c_str.ptr, &c_str) };
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_c_str_buf_from_str_interior_nul() {
+        let res = CStrBuf::from_str("got\0nul");
+        assert_eq!(res.err(), Some(CStrError::ContainsNul(3)))
+    }
+
+    #[test]
+    fn test_c_str_buf_parse_as_bytes() {
+        let c_str = CStrBuf::from_str("").unwrap();
+        assert_eq!(c_str.parse_as_bytes(), b"");
+        let c_str = CStrBuf::from_str("hello").unwrap();
+        assert_eq!(c_str.parse_as_bytes(), b"hello");
+        let c_str = CStrBuf::from_bytes(b"foo\xFF").unwrap();
+        assert_eq!(c_str.parse_as_bytes(), b"foo\xFF");
+
+        // Owned variant
+        let c_str = CStrBuf::from_str("Mary had a little lamb, Little lamb").unwrap();
+        assert_eq!(c_str.parse_as_bytes(), b"Mary had a little lamb, Little lamb");
+        let c_str = CStrBuf::from_bytes(b"Mary had a little \xD0\x0D, Little \xD0\x0D").unwrap();
+        assert_eq!(c_str.parse_as_bytes(), b"Mary had a little \xD0\x0D, Little \xD0\x0D");
+
+        // C-allocated variant
+        let c_str = unsafe {
+            let raw = bytes_dup_raw(b"hello");
+            CStrBuf::from_raw_with_dtor(raw, libc_free)
+        };
+        assert_eq!(c_str.parse_as_bytes(), b"hello");
+        let c_str = unsafe {
+            let raw = bytes_dup_raw(b"foo\xFF");
+            CStrBuf::from_raw_with_dtor(raw, libc_free)
+        };
+        assert_eq!(c_str.parse_as_bytes(), b"foo\xFF");
+    }
+
+    #[test]
+    fn test_c_str_buf_parse_as_utf8() {
+        let c_str = CStrBuf::from_str("").unwrap();
+        assert_eq!(c_str.parse_as_utf8().unwrap(), "");
+        let c_str = CStrBuf::from_str("hello").unwrap();
+        assert_eq!(c_str.parse_as_utf8().unwrap(), "hello");
+
+        // Owned variant
+        let c_str = CStrBuf::from_str("Mary had a little lamb, Little lamb").unwrap();
+        assert_eq!(c_str.parse_as_utf8().unwrap(), "Mary had a little lamb, Little lamb");
+
+        // C-allocated variant
+        let c_str = unsafe {
+            let raw = bytes_dup_raw(b"hello");
+            CStrBuf::from_raw_with_dtor(raw, libc_free)
+        };
+        assert_eq!(c_str.parse_as_utf8().unwrap(), "hello");
+    }
+
+    #[test]
+    fn test_c_str_buf_into_vec() {
+        let c_str = CStrBuf::from_str("").unwrap();
+        let vec = c_str.into_vec();
+        assert_eq!(vec.as_slice(), b"");
+        let c_str = CStrBuf::from_str("hello").unwrap();
+        let vec = c_str.into_vec();
+        assert_eq!(vec.as_slice(), b"hello");
+        let c_str = CStrBuf::from_bytes(b"foo\xFF").unwrap();
+        let vec = c_str.into_vec();
+        assert_eq!(vec.as_slice(), b"foo\xFF");
+
+        // Owned variant
+        let c_str = CStrBuf::from_str("Mary had a little lamb, Little lamb").unwrap();
+        let vec = c_str.into_vec();
+        assert_eq!(vec.as_slice(), b"Mary had a little lamb, Little lamb");
+        let c_str = CStrBuf::from_bytes(b"Mary had a little \xD0\x0D, Little \xD0\x0D").unwrap();
+        let vec = c_str.into_vec();
+        assert_eq!(vec.as_slice(), b"Mary had a little \xD0\x0D, Little \xD0\x0D");
+
+        // C-allocated variant
+        let c_str = unsafe {
+            let raw = bytes_dup_raw(b"hello");
+            CStrBuf::from_raw_with_dtor(raw, libc_free)
+        };
+        let vec = c_str.into_vec();
+        assert_eq!(vec.as_slice(), b"hello");
+        let c_str = unsafe {
+            let raw = bytes_dup_raw(b"foo\xFF");
+            CStrBuf::from_raw_with_dtor(raw, libc_free)
+        };
+        let vec = c_str.into_vec();
+        assert_eq!(vec.as_slice(), b"foo\xFF");
     }
 
     #[test]
