@@ -483,6 +483,7 @@ pub fn from_static_str(s: &'static str) -> &'static CStr {
 /// # Panics
 ///
 /// Panics if the pointer is null.
+#[inline]
 pub unsafe fn from_raw_ptr<'a, T: ?Sized>(ptr: *const libc::c_char,
                                           life_anchor: &'a T)
                                           -> &'a CStr
