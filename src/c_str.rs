@@ -523,8 +523,8 @@ impl Deref for CStrBuf {
         let p = match self.data {
             CStrData::Owned(ref v)   => (*v).as_ptr(),
             CStrData::InPlace(ref a) => a.as_ptr()
-        } as *const CStr;
-        unsafe { mem::copy_lifetime(self, &*p) }
+        } as *const libc::c_char;
+        unsafe { from_raw_ptr(p, self) }
     }
 }
 
