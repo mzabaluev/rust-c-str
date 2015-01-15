@@ -842,6 +842,38 @@ mod tests {
     }
 
     #[test]
+    fn test_c_str_buf_from_bytes() {
+        let c_str = CStrBuf::from_bytes(b"").unwrap();
+        check_c_str(&*c_str, b"");
+
+        let c_str = CStrBuf::from_bytes(b"foo\xFF").unwrap();
+        check_c_str(&*c_str, b"foo\xFF");
+
+        // Owned variant
+        let c_str = CStrBuf::from_bytes(b"Mary had a little \xD0\x0D, Little \xD0\x0D").unwrap();
+        check_c_str(&*c_str, b"Mary had a little \xD0\x0D, Little \xD0\x0D");
+
+        let res = CStrBuf::from_bytes(b"got\0nul");
+        assert_eq!(res.err(), Some(CStrError::ContainsNul(3)))
+    }
+
+    #[test]
+    fn test_c_str_buf_from_str() {
+        let c_str = CStrBuf::from_str("").unwrap();
+        check_c_str(&*c_str, b"");
+
+        let c_str = CStrBuf::from_str("hello").unwrap();
+        check_c_str(&*c_str, b"hello");
+
+        // Owned variant
+        let c_str = CStrBuf::from_str("Mary had a little lamb, Little lamb").unwrap();
+        check_c_str(&*c_str, b"Mary had a little lamb, Little lamb");
+
+        let res = CStrBuf::from_str("got\0nul");
+        assert_eq!(res.err(), Some(CStrError::ContainsNul(3)))
+    }
+
+    #[test]
     fn test_c_str_buf_into_vec() {
         let c_str = CStrBuf::from_str("").unwrap();
         let vec = c_str.into_vec();
@@ -918,6 +950,12 @@ mod tests {
     #[should_fail]
     fn test_from_static_bytes_fail() {
         let _c_str = super::from_static_bytes(b"no nul");
+    }
+
+    #[test]
+    #[should_fail]
+    fn test_from_static_str_fail() {
+        let _c_str = super::from_static_str("no nul");
     }
 
     #[test]
