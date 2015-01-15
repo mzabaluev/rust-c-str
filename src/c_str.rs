@@ -25,7 +25,7 @@
 //!
 //! # Managing foreign-allocated C strings
 //!
-//! An allocated C string is managed through the generic type `CString`.
+//! An allocated C string is managed through the type `CString`.
 //! Values of this type "own" an internal buffer of characters and will call
 //! a destructor when the value is dropped.
 //!
@@ -66,9 +66,6 @@
 //! ```
 
 #![allow(unstable)]
-#![allow(unstable_features)]
-
-#![feature(unsafe_destructor)]
 
 extern crate libc;
 
@@ -76,7 +73,6 @@ extern crate libc;
 extern crate test;
 
 use std::cmp::Ordering;
-use std::default::Default;
 use std::error::Error;
 use std::fmt;
 use std::hash;
@@ -127,101 +123,68 @@ pub unsafe fn parse_as_utf8<'a, T: ?Sized>(raw: *const libc::c_char,
 /// Representation of an allocated C String.
 ///
 /// This structure wraps a raw pointer to a null-terminated C string
-/// and a destructor to invoke when dropped.
-pub struct CString<D> where D: Dtor {
+/// and a destructor function to invoke when dropped.
+pub struct CString {
     ptr: *const libc::c_char,
-    dtor: D
+    dtor: Destroy
 }
 
-#[unsafe_destructor]
-impl<D> Drop for CString<D> where D: Dtor {
+impl Drop for CString {
     fn drop(&mut self) {
-        self.dtor.destroy(self.ptr);
+        let dtor = self.dtor;
+        unsafe { dtor(self.ptr) };
     }
 }
 
-impl<D1, D2> PartialEq<CString<D2>> for CString<D1>
-    where D1: Dtor, D2: Dtor
-{
-    fn eq(&self, other: &CString<D2>) -> bool {
+impl PartialEq for CString {
+    fn eq(&self, other: &CString) -> bool {
         unsafe { libc::strcmp(self.ptr, other.ptr) == 0 }
     }
 }
 
-impl<D> Eq for CString<D>
-    where D: Dtor
-{
+impl Eq for CString {
 }
 
-impl<D1, D2> PartialOrd<CString<D2>> for CString<D1>
-    where D1: Dtor, D2: Dtor
-{
-    fn partial_cmp(&self, other: &CString<D2>) -> Option<Ordering> {
-        let res = unsafe { libc::strcmp(self.ptr, other.ptr) as i32 };
-        res.partial_cmp(&0i32)
+impl PartialOrd for CString {
+    #[inline]
+    fn partial_cmp(&self, other: &CString) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
-impl<D> Ord for CString<D>
-    where D: Dtor
-{
-    fn cmp(&self, other: &Self) -> Ordering {
-        let res = unsafe { libc::strcmp(self.ptr, other.ptr) as i32 };
-        res.cmp(&0i32)
+impl Ord for CString {
+    fn cmp(&self, other: &CString) -> Ordering {
+        let res = unsafe { libc::strcmp(self.ptr, other.ptr) };
+        res.cmp(&(0 as libc::c_int))
     }
 }
 
-impl<D, H> hash::Hash<H> for CString<D>
-    where D: Dtor, H: hash::Hasher + hash::Writer
+impl<H> hash::Hash<H> for CString
+    where H: hash::Hasher, H: hash::Writer
 {
     fn hash(&self, state: &mut H) {
         self.parse_as_bytes().hash(state)
     }
 }
 
-/// The destructor trait for `CString`.
-pub trait Dtor {
-    /// Deallocates the string data.
-    fn destroy(&mut self, data: *const libc::c_char);
+/// Signature for deallocation functions used with `CString::new`.
+pub type Destroy = unsafe fn(*const libc::c_char);
+
+/// The deallocation function that delegates to `libc::free`.
+pub unsafe fn libc_free(ptr: *const libc::c_char) {
+    libc::free(ptr as *mut libc::c_void);
 }
 
-/// A destructor for `CString` that uses `libc::free`
-/// to deallocate the string.
-#[derive(Copy, Default)]
-pub struct LibcDtor;
+impl CString {
 
-impl Dtor for LibcDtor {
-    fn destroy(&mut self, data: *const libc::c_char) {
-        unsafe { libc::free(data as *mut libc::c_void); }
-    }
-}
-
-impl<D> CString<D> where D: Dtor + Default {
-
-    /// Create a `CString` from a pointer.
-    ///
-    /// The returned `CString` will be deallocated with a default instance
-    /// of the destructor type when the `CString` is dropped.
-    ///
-    ///# Panics
-    ///
-    /// Panics if `ptr` is null.
-    pub unsafe fn from_raw_buf(ptr: *const libc::c_char) -> CString<D> {
-        assert!(!ptr.is_null());
-        CString { ptr: ptr, dtor: Default::default() }
-    }
-}
-
-impl<D> CString<D> where D: Dtor {
-
-    /// Create a `CString` from a foreign pointer and a destructor.
+    /// Create a `CString` from a raw pointer and a destructor.
     ///
     /// The destructor will be invoked when the `CString` is dropped.
     ///
     ///# Panics
     ///
     /// Panics if `ptr` is null.
-    pub unsafe fn with_dtor(ptr: *mut libc::c_char, dtor: D) -> CString<D> {
+    pub unsafe fn new(ptr: *const libc::c_char, dtor: Destroy) -> CString {
         assert!(!ptr.is_null());
         CString { ptr: ptr, dtor: dtor }
     }
@@ -262,9 +225,9 @@ impl<D> CString<D> where D: Dtor {
     }
 }
 
-impl<D> fmt::Show for CString<D> where D: Dtor {
+impl fmt::Show for CString {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        String::from_utf8_lossy(self.parse_as_bytes()).fmt(f)
+        write!(f, "{}", String::from_utf8_lossy(self.parse_as_bytes()))
     }
 }
 
@@ -697,8 +660,8 @@ mod tests {
     use std::ptr;
     use libc;
 
-    use super::{CStr, CString, IntoCStr, LibcDtor};
-    use super::parse_c_multistring;
+    use super::{CStr, CStrBuf, CStrError, CString, IntoCStr};
+    use super::{libc_free, parse_c_multistring};
 
     pub fn check_c_str(c_str: &CStr, expected: &[u8]) {
         let buf = c_str.as_ptr();
@@ -711,17 +674,21 @@ mod tests {
         assert_eq!(term, 0);
     }
 
-    fn bytes_dup(s: &[u8]) -> CString<LibcDtor> {
+    unsafe fn bytes_dup_raw(s: &[u8]) -> *const libc::c_char {
         let len = s.len();
+        let dup = libc::malloc((len + 1) as libc::size_t) as *mut u8;
+        ptr::copy_nonoverlapping_memory(dup, s.as_ptr(), len);
+        *dup.offset(len as isize) = 0;
+        dup as *const libc::c_char
+    }
+
+    fn bytes_dup(s: &[u8]) -> CString {
         unsafe {
-            let dup = libc::malloc((len + 1) as libc::size_t) as *mut u8;
-            ptr::copy_nonoverlapping_memory(dup, s.as_ptr(), len);
-            *dup.offset(len as isize) = 0;
-            CString::from_raw_buf(dup as *const i8)
+            CString::new(bytes_dup_raw(s), libc_free)
         }
     }
 
-    fn str_dup(s: &str) -> CString<LibcDtor> {
+    fn str_dup(s: &str) -> CString {
         bytes_dup(s.as_bytes())
     }
 
@@ -940,9 +907,9 @@ mod tests {
 
     #[test]
     #[should_fail]
-    fn test_str_constructor_fail() {
-        let _c_str: CString<LibcDtor> = unsafe {
-            CString::from_raw_buf(ptr::null())
+    fn test_c_string_new_fail() {
+        let _c_str: CString = unsafe {
+            CString::new(ptr::null(), libc_free)
         };
     }
 
