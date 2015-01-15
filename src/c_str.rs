@@ -187,6 +187,15 @@ impl<H> hash::Hash<H> for OwnedCString
 pub type DestroyFn = unsafe fn(*const libc::c_char);
 
 /// The deallocation function that delegates to `libc::free`.
+///
+/// Use with `OwnedCString::new` for strings allocated with the standard C
+/// allocation function linked as `libc::malloc`.
+///
+/// # Caution
+///
+/// Note that on some platforms, the standard C allocator used by non-Rust
+/// libraries is not necessarily the same as the one linked with the crate
+/// `libc`.
 pub unsafe fn libc_free(ptr: *const libc::c_char) {
     libc::free(ptr as *mut libc::c_void);
 }
