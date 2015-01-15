@@ -136,6 +136,15 @@ impl Drop for CString {
     }
 }
 
+impl Deref for CString {
+
+    type Target = CStr;
+
+    fn deref(&self) -> &CStr {
+        unsafe { from_raw_ptr(self.ptr, self) }
+    }
+}
+
 impl PartialEq for CString {
     fn eq(&self, other: &CString) -> bool {
         unsafe { libc::strcmp(self.ptr, other.ptr) == 0 }
@@ -207,11 +216,6 @@ impl CString {
     #[inline]
     pub fn parse_as_utf8(&self) -> Result<&str, str::Utf8Error> {
         str::from_utf8(self.parse_as_bytes())
-    }
-
-    /// Coerces the recipient to a `CStr` reference.
-    pub fn as_c_str(&self) -> &CStr {
-        unsafe { from_raw_ptr(self.ptr, self) }
     }
 
     /// Return a raw pointer to the null-terminated string data.
@@ -760,7 +764,13 @@ mod tests {
     }
 
     #[test]
-    fn test_as_ptr() {
+    fn test_string_deref() {
+        let c_str = str_dup("hello");
+        check_c_str(&*c_str, b"hello");
+    }
+
+    #[test]
+    fn test_string_as_ptr() {
         let c_str = str_dup("hello");
         let len = unsafe { libc::strlen(c_str.as_ptr()) };
         assert_eq!(len, 5);
@@ -769,11 +779,11 @@ mod tests {
     #[test]
     fn test_iterator() {
         let c_string = str_dup("");
-        let mut iter = c_string.as_c_str().iter();
+        let mut iter = c_string.iter();
         assert_eq!(iter.next(), None);
 
         let c_string = str_dup("hello");
-        let mut iter = c_string.as_c_str().iter();
+        let mut iter = c_string.iter();
         assert_eq!(iter.next(), Some('h' as libc::c_char));
         assert_eq!(iter.next(), Some('e' as libc::c_char));
         assert_eq!(iter.next(), Some('l' as libc::c_char));
