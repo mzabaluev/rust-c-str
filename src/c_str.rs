@@ -334,7 +334,7 @@ pub struct CStr {
 
 fn bytes_into_c_str(s: &[u8]) -> CStrBuf {
     let mut out = CStrBuf {
-        data: CStrData::InPlace(unsafe { mem::uninitialized() })
+        data: unsafe { blank_str_data() }
     };
     if !copy_in_place(s, &mut out.data) {
         out = long_vec_into_c_str(s.to_vec());
@@ -344,12 +344,17 @@ fn bytes_into_c_str(s: &[u8]) -> CStrBuf {
 
 fn vec_into_c_str(v: Vec<u8>) -> CStrBuf {
     let mut out = CStrBuf {
-        data: CStrData::InPlace(unsafe { mem::uninitialized() })
+        data: unsafe { blank_str_data() }
     };
     if !copy_in_place(v.as_slice(), &mut out.data) {
         out = long_vec_into_c_str(v);
     }
     out
+}
+
+#[inline]
+unsafe fn blank_str_data() -> CStrData {
+    CStrData::InPlace(mem::uninitialized())
 }
 
 fn copy_in_place(s: &[u8], out: &mut CStrData) -> bool {
@@ -451,6 +456,22 @@ impl CStrBuf {
     #[inline]
     pub unsafe fn from_str_unchecked(s: &str) -> CStrBuf {
         CStrBuf::from_bytes_unchecked(s.as_bytes())
+    }
+
+    /// Converts `self` into a byte vector, potentially saving an allocation.
+    pub fn into_vec(mut self) -> Vec<u8> {
+        let mut data = unsafe { blank_str_data() };
+        mem::swap(&mut self.data, &mut data);
+        match data {
+            CStrData::Owned(mut v) => {
+                let len = v.len() - 1;
+                v.truncate(len);
+                v
+            }
+            CStrData::InPlace(ref a) => {
+                a[.. a.position_elem(&NUL).unwrap()].to_vec()
+            }
+        }
     }
 }
 
@@ -817,6 +838,27 @@ mod tests {
         let c_str = bytes_dup(b"foo\xFF");
         let res = unsafe { super::parse_as_utf8(c_str.ptr, &c_str) };
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_c_str_buf_into_vec() {
+        let c_str = CStrBuf::from_str("").unwrap();
+        let vec = c_str.into_vec();
+        assert_eq!(vec.as_slice(), b"");
+        let c_str = CStrBuf::from_str("hello").unwrap();
+        let vec = c_str.into_vec();
+        assert_eq!(vec.as_slice(), b"hello");
+        let c_str = CStrBuf::from_bytes(b"foo\xFF").unwrap();
+        let vec = c_str.into_vec();
+        assert_eq!(vec.as_slice(), b"foo\xFF");
+
+        // Owned variant
+        let c_str = CStrBuf::from_str("Mary had a little lamb, Little lamb").unwrap();
+        let vec = c_str.into_vec();
+        assert_eq!(vec.as_slice(), b"Mary had a little lamb, Little lamb");
+        let c_str = CStrBuf::from_bytes(b"Mary had a little \xD0\x0D, Little \xD0\x0D").unwrap();
+        let vec = c_str.into_vec();
+        assert_eq!(vec.as_slice(), b"Mary had a little \xD0\x0D, Little \xD0\x0D");
     }
 
     #[test]
