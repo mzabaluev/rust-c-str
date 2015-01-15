@@ -361,7 +361,7 @@ fn escape_bytestring(s: &[u8]) -> String {
     unsafe { String::from_utf8_unchecked(acc) }
 }
 
-/// Produce a static `CStr` reference out of a static string literal.
+/// Produce a `CStr` reference out of a static string literal.
 ///
 /// This macro provides a convenient way to use string literals in
 /// expressions where a `CStr` reference is expected.
@@ -399,7 +399,7 @@ impl CStrBuf {
     ///
     /// # Failure
     ///
-    /// Returns `Err` the byte slice contains an interior NUL byte.
+    /// Returns `Err` if the byte slice contains an interior NUL byte.
     pub fn from_bytes(s: &[u8]) -> Result<CStrBuf, CStrError> {
         if let Some(pos) = s.position_elem(&NUL) {
             return Err(CStrError::ContainsNul(pos));
@@ -542,7 +542,7 @@ impl Deref for CStrBuf {
     }
 }
 
-/// A generic trait for transforming data into C strings.
+/// A trait for moving data into C strings.
 ///
 /// Depending on the implementation, the conversion may avoid allocation
 /// and copying of the string buffer.
