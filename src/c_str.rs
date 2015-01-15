@@ -141,7 +141,7 @@ impl Deref for CString {
     type Target = CStr;
 
     fn deref(&self) -> &CStr {
-        unsafe { from_raw_ptr(self.ptr, self) }
+        unsafe { from_ptr_internal(self.ptr, self) }
     }
 }
 
@@ -439,6 +439,13 @@ impl CStrBuf {
     }
 }
 
+unsafe fn from_ptr_internal<'a, T: ?Sized>(ptr: *const libc::c_char,
+                                           life_anchor: &'a T)
+                                          -> &'a CStr
+{
+    std::mem::copy_lifetime(life_anchor, &*(ptr as *const CStr))
+}
+
 /// Create a `CStr` reference out of a static byte array.
 ///
 /// This function can be used with null-terminated byte string literals.
@@ -448,13 +455,12 @@ impl CStrBuf {
 /// # Panics
 ///
 /// Panics if the byte array is not null-terminated.
-#[inline]
 pub fn from_static_bytes(bytes: &'static [u8]) -> &'static CStr {
     assert!(bytes.last() == Some(&NUL),
             "static byte string is not null-terminated: \"{}\"",
             escape_bytestring(bytes));
-    let p = bytes.as_ptr() as *const CStr;
-    unsafe { mem::copy_lifetime(bytes, &*p) }
+    let ptr = bytes.as_ptr() as *const libc::c_char;
+    unsafe { from_ptr_internal(ptr, bytes) }
 }
 
 /// Create a `CStr` reference out of a static string.
@@ -466,12 +472,11 @@ pub fn from_static_bytes(bytes: &'static [u8]) -> &'static CStr {
 /// # Panics
 ///
 /// Panics if the string is not null-terminated.
-#[inline]
 pub fn from_static_str(s: &'static str) -> &'static CStr {
     assert!(s.ends_with("\0"),
             "static string is not null-terminated: \"{}\"", s);
-    let p = s.as_ptr() as *const CStr;
-    unsafe { mem::copy_lifetime(s, &*p) }
+    let ptr = s.as_ptr() as *const libc::c_char;
+    unsafe { from_ptr_internal(ptr, s) }
 }
 
 /// Constructs a `CStr` reference from a raw pointer to a
@@ -489,7 +494,7 @@ pub unsafe fn from_raw_ptr<'a, T: ?Sized>(ptr: *const libc::c_char,
                                           -> &'a CStr
 {
     assert!(!ptr.is_null());
-    std::mem::copy_lifetime(life_anchor, &*(ptr as *const CStr))
+    from_ptr_internal(ptr, life_anchor)
 }
 
 impl CStr {
@@ -525,7 +530,7 @@ impl Deref for CStrBuf {
             CStrData::Owned(ref v)   => (*v).as_ptr(),
             CStrData::InPlace(ref a) => a.as_ptr()
         } as *const libc::c_char;
-        unsafe { from_raw_ptr(p, self) }
+        unsafe { from_ptr_internal(p, self) }
     }
 }
 
