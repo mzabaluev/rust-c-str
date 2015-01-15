@@ -217,16 +217,6 @@ impl CString {
     pub fn parse_as_utf8(&self) -> Result<&str, str::Utf8Error> {
         str::from_utf8(self.parse_as_bytes())
     }
-
-    /// Return a raw pointer to the null-terminated string data.
-    ///
-    /// `.as_ptr` returns an internal pointer into the `CString`, and
-    /// may be invalidated when the `CString` falls out of scope (the
-    /// destructor will run, freeing the allocation if there is
-    /// one).
-    pub fn as_ptr(&self) -> *const libc::c_char {
-        self.ptr
-    }
 }
 
 impl fmt::Show for CString {
