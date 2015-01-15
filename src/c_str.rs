@@ -37,6 +37,13 @@
 //! various ways to produce C strings, but the conversions can fail due to
 //! some of the limitations explained above.
 //!
+//! # Borrowed C strings
+//!
+//! Both `OwnedCString` and `CStrBuf` dereference to `CStr`, a token type
+//! that asserts the C string requirements when passed or returned
+//! by reference. `&CStr` can be used to encapsulate FFI functions under a
+//! safe facade.
+//!
 //! An example of creating and using a C string would be:
 //!
 //! ```rust
@@ -278,8 +285,10 @@ pub struct CStrBuf {
     data: CStrData
 }
 
-/// A type to denote null-terminated string data dereferenced from `CStrBuf`.
-/// It is only used by reference, such as a parameter in wrapper functions.
+/// A type to denote null-terminated string data borrowed under a reference.
+///
+/// `CStr` is only used by reference, e.g. as a parameter in a safe function
+/// proxying its FFI counterpart.
 #[repr(C)]
 pub struct CStr {
     lead: libc::c_char,
