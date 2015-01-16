@@ -13,7 +13,7 @@ use std::iter::{Iterator, range};
 use std::ptr;
 use libc;
 
-use super::{CStr, CStrBuf, CStrError, OwnedCString, IntoCStr};
+use super::{CStr, CStrBuf, OwnedCString};
 use super::{libc_free, parse_c_multistring};
 
 pub fn check_c_str(c_str: &CStr, expected: &[u8]) {
@@ -65,51 +65,6 @@ fn test_str_multistring_parsing() {
 fn test_c_str_macro() {
     let c_str = c_str!("hello");
     check_c_str(c_str, b"hello");
-}
-
-fn test_into_c_str<Src>(sources: Vec<Src>,
-                        expected: &[&'static [u8]],
-                        invalid: Src)
-    where Src: IntoCStr + Clone
-{
-    let mut i = 0;
-    for src in sources.into_iter() {
-        let c_str = src.clone().into_c_str().unwrap();
-        check_c_str(&*c_str, expected[i]);
-        let c_str = unsafe { src.into_c_str_unchecked() };
-        check_c_str(&*c_str, expected[i]);
-        i += 1;
-    }
-
-    assert!(invalid.into_c_str().is_err());
-}
-
-#[test]
-fn test_bytes_into_c_str() {
-    test_into_c_str(vec!(b"", b"hello", b"foo\xFF", b"Mary had a little lamb, Little lamb"),
-                    &[b"", b"hello", b"foo\xFF", b"Mary had a little lamb, Little lamb"],
-                    b"he\x00llo");
-}
-
-#[test]
-fn test_vec_into_c_str() {
-    test_into_c_str(vec!(b"".to_vec(), b"hello".to_vec(), b"foo\xFF".to_vec()),
-                    &[b"", b"hello", b"foo\xFF"],
-                    b"he\x00llo".to_vec());
-}
-
-#[test]
-fn test_str_into_c_str() {
-    test_into_c_str(vec!("", "hello"),
-                    &[b"", b"hello"],
-                    "he\x00llo");
-}
-
-#[test]
-fn test_string_into_c_str() {
-    test_into_c_str(vec!(String::from_str(""), String::from_str("hello")),
-                    &[b"", b"hello"],
-                    String::from_str("he\x00llo"));
 }
 
 #[test]
@@ -180,7 +135,8 @@ fn test_c_str_buf_from_bytes() {
     check_c_str(&*c_str, b"Mary had a little \xD0\x0D, Little \xD0\x0D");
 
     let res = CStrBuf::from_bytes(b"got\0nul");
-    assert_eq!(res.err(), Some(CStrError::ContainsNul(3)))
+    let err = res.err().unwrap();
+    assert_eq!(err.position, 3);
 }
 
 #[test]
@@ -196,7 +152,27 @@ fn test_c_str_buf_from_str() {
     check_c_str(&*c_str, b"Mary had a little lamb, Little lamb");
 
     let res = CStrBuf::from_str("got\0nul");
-    assert_eq!(res.err(), Some(CStrError::ContainsNul(3)))
+    let err = res.err().unwrap();
+    assert_eq!(err.position, 3);
+}
+
+#[test]
+fn test_c_str_buf_from_vec() {
+    let c_str = CStrBuf::from_vec(b"".to_vec()).unwrap();
+    check_c_str(&*c_str, b"");
+
+    let c_str = CStrBuf::from_vec(b"hello".to_vec()).unwrap();
+    check_c_str(&*c_str, b"hello");
+
+    // Owned variant
+    let c_str = CStrBuf::from_vec(b"Mary had a little lamb, Little lamb".to_vec()).unwrap();
+    check_c_str(&*c_str, b"Mary had a little lamb, Little lamb");
+
+    let res = CStrBuf::from_vec(b"got\0nul".to_vec());
+    let err = res.err().unwrap();
+    assert_eq!(err.nul_error().position, 3);
+    let vec = err.into_bytes();
+    assert_eq!(vec.as_slice(), b"got\0nul");
 }
 
 #[test]

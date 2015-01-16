@@ -267,6 +267,43 @@ impl fmt::Show for NulError {
     }
 }
 
+/// A possible error value from the `CStrBuf::from_vec` function.
+pub struct IntoCStrError {
+    cause: NulError,
+    bytes: Vec<u8>
+}
+
+impl IntoCStrError {
+
+    /// Access the `NulError` that is the cause of this error.
+    pub fn nul_error(&self) -> &NulError {
+        &self.cause
+    }
+
+    /// Consume this error, returning the bytes that were attempted to make
+    /// a C string with.
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.bytes
+    }
+}
+
+impl Error for IntoCStrError {
+
+    fn description(&self) -> &str {
+        self.cause.description()
+    }
+
+    fn detail(&self) -> Option<String> {
+        self.cause.detail()
+    }
+}
+
+impl fmt::Show for IntoCStrError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self.cause)
+    }
+}
+
 const IN_PLACE_SIZE: usize = 31;
 
 #[derive(Clone)]
@@ -390,7 +427,7 @@ impl CStrBuf {
     /// # Failure
     ///
     /// Returns `Err` if the byte slice contains an interior NUL byte.
-    pub fn from_bytes(s: &[u8]) -> Result<CStrBuf, CStrError> {
+    pub fn from_bytes(s: &[u8]) -> Result<CStrBuf, NulError> {
         if let Some(pos) = s.position_elem(&NUL) {
             return Err(NulError { position: pos });
         }
@@ -409,7 +446,7 @@ impl CStrBuf {
     ///
     /// Returns `Err` if the string contains an interior NUL character.
     #[inline]
-    pub fn from_str(s: &str) -> Result<CStrBuf, CStrError> {
+    pub fn from_str(s: &str) -> Result<CStrBuf, NulError> {
         CStrBuf::from_bytes(s.as_bytes())
     }
 
@@ -418,6 +455,28 @@ impl CStrBuf {
     #[inline]
     pub unsafe fn from_str_unchecked(s: &str) -> CStrBuf {
         CStrBuf::from_bytes_unchecked(s.as_bytes())
+    }
+
+    /// Consumes a byte vector to create `CStrBuf`, taking care to avoid
+    /// copying.
+    ///
+    /// # Failure
+    ///
+    /// If the given vector contains a NUL byte, then an error containing
+    /// the original vector and `NulError` information is returned.
+    pub fn from_vec(vec: Vec<u8>) -> Result<CStrBuf, IntoCStrError> {
+        if let Some(pos) = vec.as_slice().position_elem(&NUL) {
+            return Err(IntoCStrError {
+                cause: NulError { position: pos },
+                bytes: vec
+            });
+        }
+        Ok(vec_into_c_str(vec))
+    }
+
+    /// Like `from_vec`, but without checking for interior NUL bytes.
+    pub unsafe fn from_vec_unchecked(vec: Vec<u8>) -> CStrBuf {
+        vec_into_c_str(vec)
     }
 
     /// Converts `self` into a byte vector, potentially saving an allocation.
@@ -529,77 +588,6 @@ impl Deref for CStrBuf {
             CStrData::InPlace(ref a) => a.as_ptr()
         } as *const libc::c_char;
         unsafe { from_ptr_internal(p, self) }
-    }
-}
-
-/// A trait for moving data into C strings.
-///
-/// Depending on the implementation, the conversion may avoid allocation
-/// and copying of the string buffer.
-pub trait IntoCStr {
-
-    /// Transforms the receiver into a `CStrBuf`.
-    ///
-    /// # Failure
-    ///
-    /// Returns `Err` if the receiver contains an interior NUL byte.
-    fn into_c_str(self) -> Result<CStrBuf, CStrError>;
-
-    /// Transforms the receiver into a `CStrBuf`
-    /// without checking for interior NUL bytes.
-    unsafe fn into_c_str_unchecked(self) -> CStrBuf;
-}
-
-impl<'a> IntoCStr for &'a [u8] {
-
-    #[inline]
-    fn into_c_str(self) -> Result<CStrBuf, CStrError> {
-        CStrBuf::from_bytes(self)
-    }
-
-    #[inline]
-    unsafe fn into_c_str_unchecked(self) -> CStrBuf {
-        CStrBuf::from_bytes_unchecked(self)
-    }
-}
-
-impl<'a> IntoCStr for &'a str {
-
-    #[inline]
-    fn into_c_str(self) -> Result<CStrBuf, CStrError> {
-        CStrBuf::from_str(self)
-    }
-
-    #[inline]
-    unsafe fn into_c_str_unchecked(self) -> CStrBuf {
-        CStrBuf::from_str_unchecked(self)
-    }
-}
-
-impl IntoCStr for Vec<u8> {
-
-    fn into_c_str(self) -> Result<CStrBuf, CStrError> {
-        if let Some(pos) = self.as_slice().position_elem(&NUL) {
-            return Err(CStrError::ContainsNul(pos));
-        }
-        Ok(vec_into_c_str(self))
-    }
-
-    unsafe fn into_c_str_unchecked(self) -> CStrBuf {
-        vec_into_c_str(self)
-    }
-}
-
-impl IntoCStr for String {
-
-    #[inline]
-    fn into_c_str(self) -> Result<CStrBuf, CStrError> {
-        self.into_bytes().into_c_str()
-    }
-
-    #[inline]
-    unsafe fn into_c_str_unchecked(self) -> CStrBuf {
-        self.into_bytes().into_c_str_unchecked()
     }
 }
 
