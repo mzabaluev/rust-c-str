@@ -241,43 +241,33 @@ impl fmt::Show for OwnedCString {
     }
 }
 
-/// Errors which can occur when attempting to convert data to a C string.
-#[derive(Copy, Eq, PartialEq)]
-pub enum CStrError {
+/// Error information about a failed string conversion due to an interior NUL
+/// in the source data.
+#[derive(Copy)]
+pub struct NulError {
 
-    /// The source string or a byte sequence contains a NUL byte.
-    ///
-    /// The integer gives the byte offset where the first NUL occurs.
-    ContainsNul(usize)
+    /// The offset at which the first NUL occurs.
+    pub position: usize
 }
 
-impl Error for CStrError {
+impl Error for NulError {
 
     fn description(&self) -> &str {
-        match *self {
-            CStrError::ContainsNul(_)
-                => "invalid data for C string: contains a NUL byte"
-        }
+        "invalid data for C string: contains a NUL byte"
     }
 
     fn detail(&self) -> Option<String> {
-        match *self {
-            CStrError::ContainsNul(pos)
-                => Some(format!("NUL at position {}", pos))
-        }
+        Some(format!("NUL at position {}", self.position))
     }
 }
 
-impl fmt::Show for CStrError {
+impl fmt::Show for NulError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            CStrError::ContainsNul(pos)
-                => write!(f, "invalid data for C string: NUL at position {}", pos),
-        }
+        write!(f, "invalid data for C string: NUL at position {}", self.position)
     }
 }
 
-const IN_PLACE_SIZE: usize = 24;
+const IN_PLACE_SIZE: usize = 31;
 
 #[derive(Clone)]
 enum CStrData {
@@ -402,7 +392,7 @@ impl CStrBuf {
     /// Returns `Err` if the byte slice contains an interior NUL byte.
     pub fn from_bytes(s: &[u8]) -> Result<CStrBuf, CStrError> {
         if let Some(pos) = s.position_elem(&NUL) {
-            return Err(CStrError::ContainsNul(pos));
+            return Err(NulError { position: pos });
         }
         Ok(bytes_into_c_str(s))
     }
