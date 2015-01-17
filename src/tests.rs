@@ -266,3 +266,5 @@ fn test_from_raw_ptr_fail() {
     let p: *const libc::c_char = ptr::null();
     let _c_str = unsafe { super::from_raw_ptr(p, &p) };
 }
+
+// Do you love me, Travis?
