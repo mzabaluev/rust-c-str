@@ -557,7 +557,7 @@ pub unsafe fn from_raw_ptr<'a, T: ?Sized>(ptr: *const libc::c_char,
 impl CStr {
     /// Returns a raw pointer to the null-terminated C string.
     ///
-    /// The returned pointer can only be considered to be valid
+    /// The returned pointer can only be considered valid
     /// during the lifetime of the `CStr` value.
     #[inline]
     pub fn as_ptr(&self) -> *const libc::c_char {
