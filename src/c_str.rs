@@ -193,9 +193,9 @@ pub type DestroyFn = unsafe fn(*const libc::c_char);
 ///
 /// # Caution
 ///
-/// Note that on some platforms, the standard C allocator used by non-Rust
-/// libraries is not necessarily the same as the one linked with the crate
-/// `libc`.
+/// On some platforms, such as Windows, the standard C allocator used by
+/// non-Rust libraries is not necessarily the same as the one linked
+/// with the crate `libc`.
 pub unsafe fn libc_free(ptr: *const libc::c_char) {
     libc::free(ptr as *mut libc::c_void);
 }
