@@ -336,17 +336,7 @@ fn bytes_into_c_str(s: &[u8]) -> CStrBuf {
         data: unsafe { blank_str_data() }
     };
     if !copy_in_place(s, &mut out.data) {
-        out = long_vec_into_c_str(s.to_vec());
-    }
-    out
-}
-
-fn vec_into_c_str(v: Vec<u8>) -> CStrBuf {
-    let mut out = CStrBuf {
-        data: unsafe { blank_str_data() }
-    };
-    if !copy_in_place(v.as_slice(), &mut out.data) {
-        out = long_vec_into_c_str(v);
+        out = vec_into_c_str(s.to_vec());
     }
     out
 }
@@ -371,7 +361,7 @@ fn copy_in_place(s: &[u8], out: &mut CStrData) -> bool {
     true
 }
 
-fn long_vec_into_c_str(mut v: Vec<u8>) -> CStrBuf {
+fn vec_into_c_str(mut v: Vec<u8>) -> CStrBuf {
     v.push(NUL);
     CStrBuf { data: CStrData::Owned(v) }
 }
