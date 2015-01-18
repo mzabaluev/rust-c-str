@@ -490,7 +490,7 @@ unsafe fn from_ptr_internal<'a, T: ?Sized>(ptr: *const libc::c_char,
                                            life_anchor: &'a T)
                                           -> &'a CStr
 {
-    std::mem::copy_lifetime(life_anchor, &*(ptr as *const CStr))
+    mem::copy_lifetime(life_anchor, &*(ptr as *const CStr))
 }
 
 /// Create a `CStr` reference out of a static byte array.
