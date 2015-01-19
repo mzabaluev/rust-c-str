@@ -213,26 +213,6 @@ impl OwnedCString {
         assert!(!ptr.is_null());
         OwnedCString { ptr: ptr, dtor: dtor }
     }
-
-    /// Scans the string to get a byte slice of its contents.
-    ///
-    /// The returned slice does not include the terminating NUL byte.
-    pub fn parse_as_bytes(&self) -> &[u8] {
-        unsafe {
-            let r = mem::copy_lifetime(self, &(self.ptr as *const u8));
-            slice::from_raw_buf(r, libc::strlen(self.ptr) as usize)
-        }
-    }
-
-    /// Scans the string as UTF-8 string slice.
-    ///
-    /// # Failure
-    ///
-    /// Returns `Err` if the string is not UTF-8.
-    #[inline]
-    pub fn parse_as_utf8(&self) -> Result<&str, str::Utf8Error> {
-        str::from_utf8(self.parse_as_bytes())
-    }
 }
 
 impl fmt::Show for OwnedCString {
@@ -552,6 +532,26 @@ impl CStr {
     #[inline]
     pub fn as_ptr(&self) -> *const libc::c_char {
         &self.lead as *const libc::c_char
+    }
+
+    /// Scans the string to get a byte slice of its contents.
+    ///
+    /// The returned slice does not include the terminating NUL byte.
+    pub fn parse_as_bytes(&self) -> &[u8] {
+        unsafe {
+            let r = mem::copy_lifetime(self, &(self.as_ptr() as *const u8));
+            slice::from_raw_buf(r, libc::strlen(self.as_ptr()) as usize)
+        }
+    }
+
+    /// Scans the string as UTF-8 string slice.
+    ///
+    /// # Failure
+    ///
+    /// Returns `Err` if the string is not UTF-8.
+    #[inline]
+    pub fn parse_as_utf8(&self) -> Result<&str, str::Utf8Error> {
+        str::from_utf8(self.parse_as_bytes())
     }
 
     /// Returns an iterator over the string's bytes.
