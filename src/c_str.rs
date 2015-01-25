@@ -215,7 +215,7 @@ impl OwnedCString {
     }
 }
 
-impl fmt::Show for OwnedCString {
+impl fmt::Debug for OwnedCString {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", String::from_utf8_lossy(self.parse_as_bytes()))
     }
@@ -235,13 +235,9 @@ impl Error for NulError {
     fn description(&self) -> &str {
         "invalid data for C string: contains a NUL byte"
     }
-
-    fn detail(&self) -> Option<String> {
-        Some(format!("NUL at position {}", self.position))
-    }
 }
 
-impl fmt::Show for NulError {
+impl fmt::Display for NulError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "invalid data for C string: NUL at position {}", self.position)
     }
@@ -272,15 +268,11 @@ impl Error for IntoCStrError {
     fn description(&self) -> &str {
         self.cause.description()
     }
-
-    fn detail(&self) -> Option<String> {
-        self.cause.detail()
-    }
 }
 
-impl fmt::Show for IntoCStrError {
+impl fmt::Display for IntoCStrError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self.cause)
+        write!(f, "{}", self.cause)
     }
 }
 
