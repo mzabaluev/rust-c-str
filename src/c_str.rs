@@ -104,8 +104,7 @@ pub unsafe fn parse_as_bytes<'a, T: ?Sized>(raw: *const libc::c_char,
                                            -> &'a [u8]
 {
     assert!(!raw.is_null());
-    let r = mem::copy_lifetime(life_anchor, &(raw as *const u8));
-    slice::from_raw_buf(r, libc::strlen(raw) as usize)
+    from_raw_ptr(raw, life_anchor).parse_as_bytes()
 }
 
 /// Scans a C string as UTF-8 string slice.
@@ -637,9 +636,9 @@ pub unsafe fn parse_c_multistring<F>(buf: *const libc::c_char,
         None => (false, 0)
     };
     while (!limited_count || ctr < limit) && *curr_ptr != 0 {
-        let len = libc::strlen(curr_ptr) as usize;
-        f(slice::from_raw_buf(&(curr_ptr as *const u8), len));
-        curr_ptr = curr_ptr.offset(len as isize + 1);
+        let bytes = parse_as_bytes(curr_ptr, &buf);
+        f(bytes);
+        curr_ptr = curr_ptr.offset(bytes.len() as isize + 1);
         ctr += 1;
     }
     return ctr;
