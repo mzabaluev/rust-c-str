@@ -223,7 +223,7 @@ impl fmt::Debug for OwnedCString {
 
 /// Error information about a failed string conversion due to an interior NUL
 /// in the source data.
-#[derive(Copy)]
+#[derive(Copy, Debug)]
 pub struct NulError {
 
     /// The offset at which the first NUL occurs.
@@ -244,6 +244,7 @@ impl fmt::Display for NulError {
 }
 
 /// A possible error value from the `CStrBuf::from_vec` function.
+#[derive(Debug)]
 pub struct IntoCStrError {
     cause: NulError,
     bytes: Vec<u8>
@@ -455,6 +456,19 @@ impl CStrBuf {
                 a[.. a.position_elem(&NUL).unwrap()].to_vec()
             }
         }
+    }
+
+    fn as_bytes(&self) -> &[u8] {
+        match self.data {
+            CStrData::Owned(ref v) => &v[.. v.len() - 1],
+            CStrData::InPlace(ref a) => &a[.. a.position_elem(&NUL).unwrap()]
+        }
+    }
+}
+
+impl fmt::Debug for CStrBuf {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "\"{}\"", escape_bytestring(self.as_bytes()))
     }
 }
 
