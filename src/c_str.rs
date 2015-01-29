@@ -93,7 +93,8 @@ const NUL: u8 = 0;
 
 /// Scans a C string as a byte slice.
 ///
-/// The second parameter provides the lifetime for the returned slice.
+/// The second parameter provides the lifetime for the returned slice;
+/// its value is ignored.
 /// The returned slice does not include the terminating NUL byte.
 ///
 /// # Panics
@@ -109,11 +110,13 @@ pub unsafe fn parse_as_bytes<'a, T: ?Sized>(raw: *const libc::c_char,
 
 /// Scans a C string as UTF-8 string slice.
 ///
-/// The second parameter provides the lifetime for the returned slice.
+/// The second parameter provides the lifetime for the returned slice;
+/// its value is ignored.
 ///
 /// # Failure
 ///
-/// Returns `Err` if the string is not UTF-8.
+/// Returns `Err` with information on the conversion error if the string is
+/// not valid UTF-8.
 ///
 /// # Panics
 ///
@@ -552,7 +555,8 @@ impl CStr {
     ///
     /// # Failure
     ///
-    /// Returns `Err` if the string is not UTF-8.
+    /// Returns `Err` with information on the conversion error if the string is
+    /// not valid UTF-8.
     #[inline]
     pub fn parse_as_utf8(&self) -> Result<&str, str::Utf8Error> {
         str::from_utf8(self.parse_as_bytes())
