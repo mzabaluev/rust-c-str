@@ -72,7 +72,12 @@
 //! }
 //! ```
 
-#![allow(unstable)]
+#![feature(collections)]
+#![feature(core)]
+#![feature(hash)]
+#![feature(libc)]
+#![feature(std_misc)]
+#![cfg_attr(test, feature(test))]
 
 extern crate libc;
 
