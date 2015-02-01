@@ -1,8 +1,8 @@
 [package]
 
 name = "c_string"
-version = "0.3.2-dev"
-authors = [ "Mikhail Zabaluev <mikhail.zabaluev@gmail.com>" ]
+version = "0.3.2"
+authors = ["Mikhail Zabaluev <mikhail.zabaluev@gmail.com>"]
 description = "C string helpers for Rust"
 readme = "README.md"
 license = "Apache-2.0/MIT"
