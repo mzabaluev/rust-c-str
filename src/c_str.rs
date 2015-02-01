@@ -432,7 +432,7 @@ impl CStrBuf {
     /// If the given vector contains a NUL byte, then an error containing
     /// the original vector and `NulError` information is returned.
     pub fn from_vec(vec: Vec<u8>) -> Result<CStrBuf, IntoCStrError> {
-        if let Some(pos) = vec.as_slice().position_elem(&NUL) {
+        if let Some(pos) = vec[].position_elem(&NUL) {
             return Err(IntoCStrError {
                 cause: NulError { position: pos },
                 bytes: vec
