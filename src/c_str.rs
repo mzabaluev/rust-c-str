@@ -223,8 +223,9 @@ impl OwnedCString {
 }
 
 impl fmt::Debug for OwnedCString {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", String::from_utf8_lossy(self.parse_as_bytes()))
+        (**self).fmt(f)
     }
 }
 
@@ -579,6 +580,12 @@ impl CStr {
     /// Returns true if the wrapped string is empty.
     #[inline]
     pub fn is_empty(&self) -> bool { self.lead == 0 }
+}
+
+impl fmt::Debug for CStr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "\"{}\"", escape_bytestring(self.parse_as_bytes()))
+    }
 }
 
 impl Deref for CStrBuf {

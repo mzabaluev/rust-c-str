@@ -14,7 +14,7 @@ use std::ptr;
 use libc;
 
 use super::{CStr, CStrBuf, OwnedCString};
-use super::{libc_free, parse_c_multistring};
+use super::{from_static_bytes, libc_free, parse_c_multistring};
 
 pub fn check_c_str(c_str: &CStr, expected: &[u8]) {
     let buf = c_str.as_ptr();
@@ -220,6 +220,32 @@ fn test_owned_c_string_parse_as_utf8() {
     assert_eq!(c_str.parse_as_utf8(), Ok(""));
     let c_str = bytes_dup(b"foo\xFF");
     assert!(c_str.parse_as_utf8().is_err());
+}
+
+#[test]
+fn test_c_str_debug() {
+    let c_str = c_str!("hello");
+    let msg = format!("{:?}", c_str);
+    assert_eq!(msg, "\"hello\"");
+    let c_str = c_str!("");
+    let msg = format!("{:?}", c_str);
+    assert_eq!(msg, "\"\"");
+    let c_str = from_static_bytes(b"foo\xFF\0");
+    let msg = format!("{:?}", c_str);
+    assert_eq!(msg, r#""foo\xff""#);
+}
+
+#[test]
+fn test_owned_c_string_debug() {
+    let c_str = str_dup("hello");
+    let msg = format!("{:?}", c_str);
+    assert_eq!(msg, "\"hello\"");
+    let c_str = str_dup("");
+    let msg = format!("{:?}", c_str);
+    assert_eq!(msg, "\"\"");
+    let c_str = bytes_dup(b"foo\xFF");
+    let msg = format!("{:?}", c_str);
+    assert_eq!(msg, r#""foo\xff""#);
 }
 
 #[test]
