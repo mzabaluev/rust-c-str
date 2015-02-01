@@ -9,9 +9,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#![feature(test)]
+
+extern crate c_string;
+
+extern crate test;
+
 use test::Bencher;
 
-use super::{CStr, CStrBuf};
+use c_string::{CStr, CStrBuf};
 
 #[inline(always)]
 fn smoke_c_str(s: &CStr, expected: &str) {

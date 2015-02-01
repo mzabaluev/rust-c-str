@@ -77,12 +77,8 @@
 #![feature(hash)]
 #![feature(libc)]
 #![feature(std_misc)]
-#![cfg_attr(test, feature(test))]
 
 extern crate libc;
-
-#[cfg(test)]
-extern crate test;
 
 use std::cmp::Ordering;
 use std::error::Error;
@@ -659,9 +655,3 @@ pub unsafe fn parse_c_multistring<F>(buf: *const libc::c_char,
     }
     return ctr;
 }
-
-#[cfg(test)]
-mod tests;
-
-#[cfg(test)]
-mod bench;

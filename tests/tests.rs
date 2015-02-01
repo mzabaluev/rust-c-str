@@ -9,17 +9,27 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::iter::{Iterator, range};
-use std::ptr;
-use libc;
+#![feature(core)]
+#![feature(libc)]
+#![feature(test)]
 
-use super::{CStr, CStrBuf, OwnedCString};
-use super::{from_static_bytes, libc_free, parse_c_multistring};
+#[macro_use]
+extern crate c_string;
+
+extern crate test;
+extern crate libc;
+
+use std::iter::Iterator;
+use std::ptr;
+
+use c_string::{CStr, CStrBuf, OwnedCString};
+use c_string::{from_static_bytes, from_static_str, from_raw_ptr, libc_free};
+use c_string::{parse_as_bytes, parse_as_utf8, parse_c_multistring};
 
 pub fn check_c_str(c_str: &CStr, expected: &[u8]) {
     let buf = c_str.as_ptr();
     let len = expected.len();
-    for i in range(0, len) {
+    for i in (0 .. len) {
         let byte = unsafe { *buf.offset(i as isize) as u8 };
         assert_eq!(byte, expected[i]);
     }
@@ -99,26 +109,26 @@ fn test_iterator() {
 #[test]
 fn test_parse_as_bytes() {
     let c_str = str_dup("hello");
-    let bytes = unsafe { super::parse_as_bytes(c_str.ptr, &c_str) };
+    let bytes = unsafe { parse_as_bytes(c_str.as_ptr(), &c_str) };
     assert_eq!(bytes, b"hello");
     let c_str = str_dup("");
-    let bytes = unsafe { super::parse_as_bytes(c_str.ptr, &c_str) };
+    let bytes = unsafe { parse_as_bytes(c_str.as_ptr(), &c_str) };
     assert_eq!(bytes, b"");
     let c_str = bytes_dup(b"foo\xFF");
-    let bytes = unsafe { super::parse_as_bytes(c_str.ptr, &c_str) };
+    let bytes = unsafe { parse_as_bytes(c_str.as_ptr(), &c_str) };
     assert_eq!(bytes, b"foo\xFF");
 }
 
 #[test]
 fn test_parse_as_utf8() {
     let c_str = str_dup("hello");
-    let res = unsafe { super::parse_as_utf8(c_str.ptr, &c_str) };
+    let res = unsafe { parse_as_utf8(c_str.as_ptr(), &c_str) };
     assert_eq!(res, Ok("hello"));
     let c_str = str_dup("");
-    let res = unsafe { super::parse_as_utf8(c_str.ptr, &c_str) };
+    let res = unsafe { parse_as_utf8(c_str.as_ptr(), &c_str) };
     assert_eq!(res, Ok(""));
     let c_str = bytes_dup(b"foo\xFF");
-    let res = unsafe { super::parse_as_utf8(c_str.ptr, &c_str) };
+    let res = unsafe { parse_as_utf8(c_str.as_ptr(), &c_str) };
     assert!(res.is_err());
 }
 
@@ -172,28 +182,28 @@ fn test_c_str_buf_from_vec() {
     let err = res.err().unwrap();
     assert_eq!(err.nul_error().position, 3);
     let vec = err.into_bytes();
-    assert_eq!(vec.as_slice(), b"got\0nul");
+    assert_eq!(&vec[], b"got\0nul");
 }
 
 #[test]
 fn test_c_str_buf_into_vec() {
     let c_str = CStrBuf::from_str("").unwrap();
     let vec = c_str.into_vec();
-    assert_eq!(vec.as_slice(), b"");
+    assert_eq!(&vec[], b"");
     let c_str = CStrBuf::from_str("hello").unwrap();
     let vec = c_str.into_vec();
-    assert_eq!(vec.as_slice(), b"hello");
+    assert_eq!(&vec[], b"hello");
     let c_str = CStrBuf::from_bytes(b"foo\xFF").unwrap();
     let vec = c_str.into_vec();
-    assert_eq!(vec.as_slice(), b"foo\xFF");
+    assert_eq!(&vec[], b"foo\xFF");
 
     // Owned variant
     let c_str = CStrBuf::from_str("Mary had a little lamb, Little lamb").unwrap();
     let vec = c_str.into_vec();
-    assert_eq!(vec.as_slice(), b"Mary had a little lamb, Little lamb");
+    assert_eq!(&vec[], b"Mary had a little lamb, Little lamb");
     let c_str = CStrBuf::from_bytes(b"Mary had a little \xD0\x0D, Little \xD0\x0D").unwrap();
     let vec = c_str.into_vec();
-    assert_eq!(vec.as_slice(), b"Mary had a little \xD0\x0D, Little \xD0\x0D");
+    assert_eq!(&vec[], b"Mary had a little \xD0\x0D, Little \xD0\x0D");
 }
 
 #[test]
@@ -253,7 +263,7 @@ fn test_owned_c_string_debug() {
 fn test_parse_null_as_bytes_fail() {
     unsafe {
         let p: *const libc::c_char = ptr::null();
-        let _ = super::parse_as_bytes(p, &p);
+        let _ = parse_as_bytes(p, &p);
     };
 }
 
@@ -262,7 +272,7 @@ fn test_parse_null_as_bytes_fail() {
 fn test_parse_null_as_utf8_fail() {
     unsafe {
         let p: *const libc::c_char = ptr::null();
-        let _ = super::parse_as_utf8(p, &p);
+        let _ = parse_as_utf8(p, &p);
     };
 }
 
@@ -277,20 +287,18 @@ fn test_c_string_new_fail() {
 #[test]
 #[should_fail]
 fn test_from_static_bytes_fail() {
-    let _c_str = super::from_static_bytes(b"no nul");
+    let _c_str = from_static_bytes(b"no nul");
 }
 
 #[test]
 #[should_fail]
 fn test_from_static_str_fail() {
-    let _c_str = super::from_static_str("no nul");
+    let _c_str = from_static_str("no nul");
 }
 
 #[test]
 #[should_fail]
 fn test_from_raw_ptr_fail() {
     let p: *const libc::c_char = ptr::null();
-    let _c_str = unsafe { super::from_raw_ptr(p, &p) };
+    let _c_str = unsafe { from_raw_ptr(p, &p) };
 }
-
-// Do you love me, Travis?
