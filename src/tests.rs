@@ -46,7 +46,7 @@ fn str_dup(s: &str) -> OwnedCString {
 }
 
 #[test]
-fn test_str_multistring_parsing() {
+fn test_parse_c_multistring() {
     unsafe {
         let input = b"zero\0one\0\0";
         let ptr = input.as_ptr();
@@ -68,13 +68,13 @@ fn test_c_str_macro() {
 }
 
 #[test]
-fn test_string_deref() {
+fn test_owned_c_string_deref() {
     let c_str = str_dup("hello");
     check_c_str(&*c_str, b"hello");
 }
 
 #[test]
-fn test_string_as_ptr() {
+fn test_owned_c_string_as_ptr() {
     let c_str = str_dup("hello");
     let len = unsafe { libc::strlen(c_str.as_ptr()) };
     assert_eq!(len, 5);
@@ -203,7 +203,7 @@ fn test_c_str_is_empty() {
 }
 
 #[test]
-fn test_c_string_parse_as_bytes() {
+fn test_owned_c_string_parse_as_bytes() {
     let c_str = str_dup("hello");
     assert_eq!(c_str.parse_as_bytes(), b"hello");
     let c_str = str_dup("");
@@ -213,7 +213,7 @@ fn test_c_string_parse_as_bytes() {
 }
 
 #[test]
-fn test_c_string_parse_as_utf8() {
+fn test_owned_c_string_parse_as_utf8() {
     let c_str = str_dup("hello");
     assert_eq!(c_str.parse_as_utf8(), Ok("hello"));
     let c_str = str_dup("");
