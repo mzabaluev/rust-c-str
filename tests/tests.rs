@@ -109,26 +109,26 @@ fn test_iterator() {
 #[test]
 fn test_parse_as_bytes() {
     let c_str = str_dup("hello");
-    let bytes = unsafe { parse_as_bytes(c_str.as_ptr(), &c_str) };
+    let bytes = unsafe { parse_as_bytes(c_str.as_ptr()) };
     assert_eq!(bytes, b"hello");
     let c_str = str_dup("");
-    let bytes = unsafe { parse_as_bytes(c_str.as_ptr(), &c_str) };
+    let bytes = unsafe { parse_as_bytes(c_str.as_ptr()) };
     assert_eq!(bytes, b"");
     let c_str = bytes_dup(b"foo\xFF");
-    let bytes = unsafe { parse_as_bytes(c_str.as_ptr(), &c_str) };
+    let bytes = unsafe { parse_as_bytes(c_str.as_ptr()) };
     assert_eq!(bytes, b"foo\xFF");
 }
 
 #[test]
 fn test_parse_as_utf8() {
     let c_str = str_dup("hello");
-    let res = unsafe { parse_as_utf8(c_str.as_ptr(), &c_str) };
+    let res = unsafe { parse_as_utf8(c_str.as_ptr()) };
     assert_eq!(res, Ok("hello"));
     let c_str = str_dup("");
-    let res = unsafe { parse_as_utf8(c_str.as_ptr(), &c_str) };
+    let res = unsafe { parse_as_utf8(c_str.as_ptr()) };
     assert_eq!(res, Ok(""));
     let c_str = bytes_dup(b"foo\xFF");
-    let res = unsafe { parse_as_utf8(c_str.as_ptr(), &c_str) };
+    let res = unsafe { parse_as_utf8(c_str.as_ptr()) };
     assert!(res.is_err());
 }
 
@@ -263,7 +263,7 @@ fn test_owned_c_string_debug() {
 fn test_parse_null_as_bytes_fail() {
     unsafe {
         let p: *const libc::c_char = ptr::null();
-        let _ = parse_as_bytes(p, &p);
+        let _ = parse_as_bytes(p);
     };
 }
 
@@ -272,7 +272,7 @@ fn test_parse_null_as_bytes_fail() {
 fn test_parse_null_as_utf8_fail() {
     unsafe {
         let p: *const libc::c_char = ptr::null();
-        let _ = parse_as_utf8(p, &p);
+        let _ = parse_as_utf8(p);
     };
 }
 
@@ -300,5 +300,5 @@ fn test_from_static_str_fail() {
 #[should_fail]
 fn test_from_raw_ptr_fail() {
     let p: *const libc::c_char = ptr::null();
-    let _c_str = unsafe { from_raw_ptr(p, &p) };
+    let _c_str = unsafe { from_raw_ptr(p) };
 }

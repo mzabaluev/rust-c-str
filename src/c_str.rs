@@ -94,19 +94,45 @@ const NUL: u8 = 0;
 
 /// Scans a C string as a byte slice.
 ///
-/// The second parameter provides the lifetime for the returned slice;
-/// its value is ignored.
 /// The returned slice does not include the terminating NUL byte.
 ///
 /// # Panics
 ///
 /// Panics if the string pointer is null.
-pub unsafe fn parse_as_bytes<'a, T: ?Sized>(raw: *const libc::c_char,
-                                            life_anchor: &'a T)
-                                           -> &'a [u8]
+///
+/// # Caveat
+///
+/// The lifetime of the returned reference is inferred from its usage.
+/// This may be incorrect in many cases. Consider this example:
+///
+/// ```rust
+/// #[macro_use]
+/// extern crate c_string;
+///
+/// extern crate libc;
+/// extern "C" {
+///     fn strdup(source: *const libc::c_char) -> *mut libc::c_char;
+/// }
+///
+/// fn main() {
+///     let ptr = unsafe { strdup(c_str!("Hello!").as_ptr()) };
+///     let s = unsafe { c_string::parse_as_bytes(ptr) };
+///
+///     unsafe { libc::free(ptr as *mut libc::c_void) };
+///
+///     // The line below, if uncommented, will access freed memory:
+///     //let guess_what = s[0];
+/// }
+/// ```
+///
+/// To prevent accidental misuse, the lifetime should be assigned in some
+/// controllable way. This can be a helper function or method taking the
+/// lifetime from a `host` value, when available. In other cases, explicit
+/// annotation may be used.
+pub unsafe fn parse_as_bytes<'a>(raw: *const libc::c_char) -> &'a [u8]
 {
     assert!(!raw.is_null());
-    from_raw_ptr(raw, life_anchor).parse_as_bytes()
+    from_raw_ptr(raw).parse_as_bytes()
 }
 
 /// Scans a C string as UTF-8 string slice.
@@ -122,12 +148,17 @@ pub unsafe fn parse_as_bytes<'a, T: ?Sized>(raw: *const libc::c_char,
 /// # Panics
 ///
 /// Panics if the string pointer is null.
+///
+/// # Caveat
+///
+/// The lifetime of the returned reference is inferred from its usage.
+/// See the documentation on `parse_as_bytes` for possible pitfalls and
+/// suggested practices to avoid them.
 #[inline]
-pub unsafe fn parse_as_utf8<'a, T: ?Sized>(raw: *const libc::c_char,
-                                           life_anchor: &'a T)
-                                          -> Result<&'a str, str::Utf8Error>
+pub unsafe fn parse_as_utf8<'a>(raw: *const libc::c_char)
+                               -> Result<&'a str, str::Utf8Error>
 {
-    str::from_utf8(parse_as_bytes(raw, life_anchor))
+    str::from_utf8(parse_as_bytes(raw))
 }
 
 /// Representation of an allocated C String.
@@ -151,7 +182,7 @@ impl Deref for OwnedCString {
     type Target = CStr;
 
     fn deref(&self) -> &CStr {
-        unsafe { from_ptr_internal(self.ptr, self) }
+        unsafe { from_ptr_internal(self.ptr) }
     }
 }
 
@@ -476,11 +507,10 @@ impl fmt::Debug for CStrBuf {
     }
 }
 
-unsafe fn from_ptr_internal<'a, T: ?Sized>(ptr: *const libc::c_char,
-                                           life_anchor: &'a T)
-                                          -> &'a CStr
+#[inline]
+unsafe fn from_ptr_internal<'a>(ptr: *const libc::c_char) -> &'a CStr
 {
-    mem::copy_lifetime(life_anchor, &*(ptr as *const CStr))
+    mem::transmute(&*(ptr as *const CStr))
 }
 
 /// Create a `CStr` reference out of a static byte array.
@@ -497,7 +527,7 @@ pub fn from_static_bytes(bytes: &'static [u8]) -> &'static CStr {
             "static byte string is not null-terminated: \"{}\"",
             escape_bytestring(bytes));
     let ptr = bytes.as_ptr() as *const libc::c_char;
-    unsafe { from_ptr_internal(ptr, bytes) }
+    unsafe { from_ptr_internal(ptr) }
 }
 
 /// Create a `CStr` reference out of a static string.
@@ -513,7 +543,7 @@ pub fn from_static_str(s: &'static str) -> &'static CStr {
     assert!(s.ends_with("\0"),
             "static string is not null-terminated: \"{}\"", s);
     let ptr = s.as_ptr() as *const libc::c_char;
-    unsafe { from_ptr_internal(ptr, s) }
+    unsafe { from_ptr_internal(ptr) }
 }
 
 /// Constructs a `CStr` reference from a raw pointer to a
@@ -525,12 +555,17 @@ pub fn from_static_str(s: &'static str) -> &'static CStr {
 /// # Panics
 ///
 /// Panics if the pointer is null.
-pub unsafe fn from_raw_ptr<'a, T: ?Sized>(ptr: *const libc::c_char,
-                                          life_anchor: &'a T)
-                                          -> &'a CStr
+///
+/// # Caveat
+///
+/// The lifetime of the returned reference is inferred from its usage.
+/// See the documentation on `parse_as_bytes` for possible pitfalls and
+/// suggested practices to avoid them.
+#[inline]
+pub unsafe fn from_raw_ptr<'a>(ptr: *const libc::c_char) -> &'a CStr
 {
     assert!(!ptr.is_null());
-    from_ptr_internal(ptr, life_anchor)
+    from_ptr_internal(ptr)
 }
 
 impl CStr {
@@ -593,7 +628,7 @@ impl Deref for CStrBuf {
             CStrData::Owned(ref v)   => (*v).as_ptr(),
             CStrData::InPlace(ref a) => a.as_ptr()
         } as *const libc::c_char;
-        unsafe { from_ptr_internal(p, self) }
+        unsafe { from_ptr_internal(p) }
     }
 }
 
@@ -648,7 +683,7 @@ pub unsafe fn parse_c_multistring<F>(buf: *const libc::c_char,
         None => (false, 0)
     };
     while (!limited_count || ctr < limit) && *curr_ptr != 0 {
-        let bytes = parse_as_bytes(curr_ptr, &buf);
+        let bytes = parse_as_bytes(curr_ptr);
         f(bytes);
         curr_ptr = curr_ptr.offset(bytes.len() as isize + 1);
         ctr += 1;
