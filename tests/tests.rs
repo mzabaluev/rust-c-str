@@ -79,7 +79,7 @@ fn test_c_str_macro() {
 #[test]
 fn test_owned_c_string_deref() {
     let c_str = str_dup("hello");
-    check_c_str(&*c_str, b"hello");
+    check_c_str(&c_str, b"hello");
 }
 
 #[test]
@@ -108,14 +108,14 @@ fn test_iterator() {
 #[test]
 fn test_c_str_buf_from_bytes() {
     let c_str = CStrBuf::from_bytes(b"").unwrap();
-    check_c_str(&*c_str, b"");
+    check_c_str(&c_str, b"");
 
     let c_str = CStrBuf::from_bytes(b"foo\xFF").unwrap();
-    check_c_str(&*c_str, b"foo\xFF");
+    check_c_str(&c_str, b"foo\xFF");
 
     // Owned variant
     let c_str = CStrBuf::from_bytes(b"Mary had a little \xD0\x0D, Little \xD0\x0D").unwrap();
-    check_c_str(&*c_str, b"Mary had a little \xD0\x0D, Little \xD0\x0D");
+    check_c_str(&c_str, b"Mary had a little \xD0\x0D, Little \xD0\x0D");
 
     let res = CStrBuf::from_bytes(b"got\0nul");
     let err = res.err().unwrap();
@@ -125,14 +125,14 @@ fn test_c_str_buf_from_bytes() {
 #[test]
 fn test_c_str_buf_from_str() {
     let c_str = CStrBuf::from_str("").unwrap();
-    check_c_str(&*c_str, b"");
+    check_c_str(&c_str, b"");
 
     let c_str = CStrBuf::from_str("hello").unwrap();
-    check_c_str(&*c_str, b"hello");
+    check_c_str(&c_str, b"hello");
 
     // Owned variant
     let c_str = CStrBuf::from_str("Mary had a little lamb, Little lamb").unwrap();
-    check_c_str(&*c_str, b"Mary had a little lamb, Little lamb");
+    check_c_str(&c_str, b"Mary had a little lamb, Little lamb");
 
     let res = CStrBuf::from_str("got\0nul");
     let err = res.err().unwrap();
@@ -142,14 +142,14 @@ fn test_c_str_buf_from_str() {
 #[test]
 fn test_c_str_buf_from_vec() {
     let c_str = CStrBuf::from_vec(b"".to_vec()).unwrap();
-    check_c_str(&*c_str, b"");
+    check_c_str(&c_str, b"");
 
     let c_str = CStrBuf::from_vec(b"hello".to_vec()).unwrap();
-    check_c_str(&*c_str, b"hello");
+    check_c_str(&c_str, b"hello");
 
     // Owned variant
     let c_str = CStrBuf::from_vec(b"Mary had a little lamb, Little lamb".to_vec()).unwrap();
-    check_c_str(&*c_str, b"Mary had a little lamb, Little lamb");
+    check_c_str(&c_str, b"Mary had a little lamb, Little lamb");
 
     let res = CStrBuf::from_vec(b"got\0nul".to_vec());
     let err = res.err().unwrap();

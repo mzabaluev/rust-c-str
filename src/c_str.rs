@@ -68,7 +68,7 @@
 //!             Err(e) => panic!(e)
 //!         };
 //!
-//!     safe_puts(&*my_c_string);
+//!     safe_puts(&my_c_string);
 //! }
 //! ```
 
