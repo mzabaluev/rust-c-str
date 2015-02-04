@@ -33,9 +33,9 @@
 //!
 //! The type `CStrBuf` is used to adapt string data from Rust for calling
 //! C functions that expect a null-terminated string. The conversion
-//! constructors of `CStrBuf` and implementations of trait `IntoCStr` provide
-//! various ways to produce C strings, but the conversions can fail due to
-//! some of the limitations explained above.
+//! constructors of `CStrBuf` provide various ways to produce C strings,
+//! but the conversions can fail due to some of the limitations explained
+//! above.
 //!
 //! # Borrowed C strings
 //!
