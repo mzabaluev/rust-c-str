@@ -105,7 +105,7 @@ const NUL: u8 = 0;
 /// The lifetime of the returned reference is inferred from its usage.
 /// This may be incorrect in many cases. Consider this example:
 ///
-/// ```rust
+/// ```no_run
 /// #[macro_use]
 /// extern crate c_string;
 ///
@@ -120,14 +120,14 @@ const NUL: u8 = 0;
 ///
 ///     unsafe { libc::free(ptr as *mut libc::c_void) };
 ///
-///     // The line below, if uncommented, will access freed memory:
-///     //let guess_what = s[0];
+///     let guess_what = s[0];
+///     // The lifetime of s is inferred to extend to the line above
 /// }
 /// ```
 ///
 /// To prevent accidental misuse, the lifetime should be assigned in some
 /// controllable way. This can be a helper function or method taking the
-/// lifetime from a `host` value, when available. In other cases, explicit
+/// lifetime from a 'host' value, when available. In other cases, explicit
 /// annotation may be used.
 pub unsafe fn parse_as_bytes<'a>(raw: *const libc::c_char) -> &'a [u8]
 {
