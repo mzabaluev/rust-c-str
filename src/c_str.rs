@@ -75,15 +75,18 @@
 #![feature(collections)]
 #![feature(core)]
 #![feature(hash)]
+#![feature(io)]
 #![feature(libc)]
 #![feature(std_misc)]
 
 extern crate libc;
 
 use std::cmp::Ordering;
-use std::error::Error;
+use std::error::{Error, FromError};
 use std::fmt;
 use std::hash;
+use std::io::Error as IoError;
+use std::io::ErrorKind::InvalidInput;
 use std::marker;
 use std::mem;
 use std::ops::Deref;
@@ -209,6 +212,13 @@ impl fmt::Display for NulError {
     }
 }
 
+impl FromError<NulError> for IoError {
+    fn from_error(err: NulError) -> IoError {
+        IoError::new(InvalidInput, "invalid data for C string: contains a NUL byte",
+                     Some(format!("NUL at position {}", err.position)))
+    }
+}
+
 /// A possible error value from the `CStrBuf::from_vec` function.
 #[derive(Debug)]
 pub struct IntoCStrError {
@@ -219,8 +229,8 @@ pub struct IntoCStrError {
 impl IntoCStrError {
 
     /// Access the `NulError` that is the cause of this error.
-    pub fn nul_error(&self) -> &NulError {
-        &self.cause
+    pub fn nul_error(&self) -> NulError {
+        self.cause
     }
 
     /// Consume this error, returning the bytes that were attempted to make
@@ -240,6 +250,12 @@ impl Error for IntoCStrError {
 impl fmt::Display for IntoCStrError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.cause)
+    }
+}
+
+impl FromError<IntoCStrError> for IoError {
+    fn from_error(err: IntoCStrError) -> IoError {
+        FromError::from_error(err.nul_error())
     }
 }
 

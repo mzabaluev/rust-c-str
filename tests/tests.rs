@@ -10,6 +10,7 @@
 // except according to those terms.
 
 #![feature(core)]
+#![feature(io)]
 #![feature(libc)]
 #![feature(test)]
 
@@ -19,6 +20,9 @@ extern crate c_string;
 extern crate test;
 extern crate libc;
 
+use std::error::FromError;
+use std::io::Error as IoError;
+use std::io::ErrorKind::InvalidInput;
 use std::iter::Iterator;
 use std::ptr;
 
@@ -140,6 +144,15 @@ fn test_c_str_buf_from_str() {
 }
 
 #[test]
+fn test_io_error_from_nul_error() {
+    let res = CStrBuf::from_str("got\0nul");
+    let err = res.err().unwrap();
+    let io_err: IoError = FromError::from_error(err);
+    assert_eq!(io_err.kind(), InvalidInput);
+    assert!(io_err.detail().is_some());
+}
+
+#[test]
 fn test_c_str_buf_from_vec() {
     let c_str = CStrBuf::from_vec(b"".to_vec()).unwrap();
     check_c_str(&c_str, b"");
@@ -156,6 +169,15 @@ fn test_c_str_buf_from_vec() {
     assert_eq!(err.nul_error().position, 3);
     let vec = err.into_bytes();
     assert_eq!(&vec[], b"got\0nul");
+}
+
+#[test]
+fn test_io_error_from_into_c_str_error() {
+    let res = CStrBuf::from_vec(b"got\0nul".to_vec());
+    let err = res.err().unwrap();
+    let io_err: IoError = FromError::from_error(err);
+    assert_eq!(io_err.kind(), InvalidInput);
+    assert!(io_err.detail().is_some());
 }
 
 #[test]
