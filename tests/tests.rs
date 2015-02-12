@@ -123,7 +123,7 @@ fn test_c_str_buf_from_bytes() {
 
     let res = CStrBuf::from_bytes(b"got\0nul");
     let err = res.err().unwrap();
-    assert_eq!(err.position, 3);
+    assert_eq!(err.nul_position(), 3);
 }
 
 #[test]
@@ -140,7 +140,7 @@ fn test_c_str_buf_from_str() {
 
     let res = CStrBuf::from_str("got\0nul");
     let err = res.err().unwrap();
-    assert_eq!(err.position, 3);
+    assert_eq!(err.nul_position(), 3);
 }
 
 #[test]
@@ -166,7 +166,7 @@ fn test_c_str_buf_from_vec() {
 
     let res = CStrBuf::from_vec(b"got\0nul".to_vec());
     let err = res.err().unwrap();
-    assert_eq!(err.nul_error().position, 3);
+    assert_eq!(err.nul_error().nul_position(), 3);
     let vec = err.into_bytes();
     assert_eq!(&vec[], b"got\0nul");
 }

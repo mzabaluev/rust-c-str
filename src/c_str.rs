@@ -196,7 +196,11 @@ impl fmt::Debug for OwnedCString {
 pub struct NulError {
 
     /// The offset at which the first NUL occurs.
-    pub position: usize
+    position: usize
+}
+
+impl NulError {
+    pub fn nul_position(&self) -> usize { self.position }
 }
 
 impl Error for NulError {
