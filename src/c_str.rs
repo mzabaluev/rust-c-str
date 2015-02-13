@@ -284,10 +284,9 @@ pub struct CStrBuf {
 ///
 /// `CStr` is only used by reference, e.g. as a parameter in a safe function
 /// proxying its FFI counterpart.
-#[repr(C)]
+#[repr(packed)]
 pub struct CStr {
-    lead: libc::c_char,
-    marker: marker::NoCopy
+    chars: [libc::c_char]
 }
 
 fn bytes_into_c_str(s: &[u8]) -> CStrBuf {
@@ -502,7 +501,8 @@ impl CStr {
     /// annotation may be used.
     #[inline]
     pub unsafe fn from_ptr<'a>(raw: *const libc::c_char) -> &'a CStr {
-        mem::transmute(&*(raw as *const CStr))
+        let inner = slice::from_raw_parts(raw, 1);
+        mem::transmute(inner)
     }
 
     /// Create a `CStr` reference out of a static byte array.
@@ -544,7 +544,7 @@ impl CStr {
     /// during the lifetime of the `CStr` value.
     #[inline]
     pub fn as_ptr(&self) -> *const libc::c_char {
-        &self.lead as *const libc::c_char
+        self.chars.as_ptr()
     }
 
     /// Scans the string to get a byte slice of its contents.
@@ -579,7 +579,7 @@ impl CStr {
 
     /// Returns true if the wrapped string is empty.
     #[inline]
-    pub fn is_empty(&self) -> bool { self.lead == 0 }
+    pub fn is_empty(&self) -> bool { self.chars[0] == 0 }
 }
 
 impl fmt::Debug for CStr {
