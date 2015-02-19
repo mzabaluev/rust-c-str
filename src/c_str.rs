@@ -77,7 +77,6 @@
 #![feature(hash)]
 #![feature(io)]
 #![feature(libc)]
-#![feature(std_misc)]
 
 extern crate libc;
 
@@ -328,11 +327,7 @@ fn escape_bytestring(s: &[u8]) -> String {
     use std::ascii;
 
     let mut acc = Vec::with_capacity(s.len());
-    for c in s.iter() {
-        ascii::escape_default(*c, |esc| {
-            acc.push(esc);
-        })
-    }
+    acc.extend(s.iter().cloned().flat_map(ascii::escape_default));
     unsafe { String::from_utf8_unchecked(acc) }
 }
 
