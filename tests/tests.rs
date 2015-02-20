@@ -168,7 +168,7 @@ fn test_c_str_buf_from_vec() {
     let err = res.err().unwrap();
     assert_eq!(err.nul_error().nul_position(), 3);
     let vec = err.into_bytes();
-    assert_eq!(&vec[], b"got\0nul");
+    assert_eq!(&vec[..], b"got\0nul");
 }
 
 #[test]
@@ -184,21 +184,21 @@ fn test_io_error_from_into_c_str_error() {
 fn test_c_str_buf_into_vec() {
     let c_str = CStrBuf::from_str("").unwrap();
     let vec = c_str.into_vec();
-    assert_eq!(&vec[], b"");
+    assert_eq!(&vec[..], b"");
     let c_str = CStrBuf::from_str("hello").unwrap();
     let vec = c_str.into_vec();
-    assert_eq!(&vec[], b"hello");
+    assert_eq!(&vec[..], b"hello");
     let c_str = CStrBuf::from_bytes(b"foo\xFF").unwrap();
     let vec = c_str.into_vec();
-    assert_eq!(&vec[], b"foo\xFF");
+    assert_eq!(&vec[..], b"foo\xFF");
 
     // Owned variant
     let c_str = CStrBuf::from_str("Mary had a little lamb, Little lamb").unwrap();
     let vec = c_str.into_vec();
-    assert_eq!(&vec[], b"Mary had a little lamb, Little lamb");
+    assert_eq!(&vec[..], b"Mary had a little lamb, Little lamb");
     let c_str = CStrBuf::from_bytes(b"Mary had a little \xD0\x0D, Little \xD0\x0D").unwrap();
     let vec = c_str.into_vec();
-    assert_eq!(&vec[], b"Mary had a little \xD0\x0D, Little \xD0\x0D");
+    assert_eq!(&vec[..], b"Mary had a little \xD0\x0D, Little \xD0\x0D");
 }
 
 #[test]

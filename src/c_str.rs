@@ -74,7 +74,6 @@
 
 #![feature(collections)]
 #![feature(core)]
-#![feature(hash)]
 #![feature(io)]
 #![feature(libc)]
 
@@ -142,10 +141,8 @@ impl Ord for OwnedCString {
     }
 }
 
-impl<H> hash::Hash<H> for OwnedCString
-    where H: hash::Hasher, H: hash::Writer
-{
-    fn hash(&self, state: &mut H) {
+impl hash::Hash for OwnedCString {
+    fn hash<H>(&self, state: &mut H) where H: hash::Hasher {
         self.to_bytes().hash(state)
     }
 }
@@ -408,7 +405,7 @@ impl CStrBuf {
     /// If the given vector contains a NUL byte, then an error containing
     /// the original vector and `NulError` information is returned.
     pub fn from_vec(vec: Vec<u8>) -> Result<CStrBuf, IntoCStrError> {
-        if let Some(pos) = vec[].position_elem(&NUL) {
+        if let Some(pos) = vec[..].position_elem(&NUL) {
             return Err(IntoCStrError {
                 cause: NulError { position: pos },
                 bytes: vec
@@ -568,7 +565,7 @@ impl CStr {
     pub fn iter<'a>(&'a self) -> CChars<'a> {
         CChars {
             ptr: self.as_ptr(),
-            lifetime: marker::ContravariantLifetime
+            lifetime: marker::PhantomData
         }
     }
 
@@ -602,12 +599,11 @@ impl Deref for CStrBuf {
 /// returning the NUL.
 ///
 /// Use with the `std::iter` module.
+#[derive(Copy)]
 pub struct CChars<'a> {
     ptr: *const libc::c_char,
-    lifetime: marker::ContravariantLifetime<'a>,
+    lifetime: marker::PhantomData<&'a [libc::c_char]>,
 }
-
-impl<'a> Copy for CChars<'a> { }
 
 impl<'a> Iterator for CChars<'a> {
 
@@ -641,7 +637,7 @@ pub unsafe fn parse_c_multistring<F>(buf: *const libc::c_char,
     where F: FnMut(&[u8])
 {
     let mut curr_ptr = buf;
-    let mut ctr = 0us;
+    let mut ctr: usize = 0;
     let (limited_count, limit) = match limit {
         Some(limit) => (true, limit),
         None => (false, 0)
