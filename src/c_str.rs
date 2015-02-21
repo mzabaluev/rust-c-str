@@ -39,10 +39,10 @@
 //!
 //! # Borrowed C strings
 //!
-//! Both `OwnedCString` and `CStrBuf` dereference to `CStr`, a token type
-//! that asserts the C string requirements when passed or returned
-//! by reference. `&CStr` can be used to encapsulate FFI functions under a
-//! safe facade.
+//! Both `OwnedCString` and `CStrBuf` dereference to `std::ffi::CStr`, an
+//! unsized type that asserts the C string requirements when passed or
+//! returned by reference. `&CStr` can be used to encapsulate FFI functions
+//! under a safe facade.
 //!
 //! An example of creating and using a C string would be:
 //!
@@ -52,7 +52,8 @@
 //! extern crate c_string;
 //! extern crate libc;
 //!
-//! use c_string::{CStr, CStrBuf};
+//! use c_string::CStrBuf;
+//! use std::ffi::CStr;
 //!
 //! fn safe_puts(s: &CStr) {
 //!     unsafe { libc::puts(s.as_ptr()) };
@@ -76,20 +77,22 @@
 #![feature(core)]
 #![feature(io)]
 #![feature(libc)]
+#![feature(std_misc)]
 
 extern crate libc;
 
 use std::cmp::Ordering;
 use std::error::{Error, FromError};
+use std::ffi::CStr;
 use std::fmt;
+use std::fmt::Debug;
 use std::hash;
 use std::io::Error as IoError;
 use std::io::ErrorKind::InvalidInput;
+use std::iter::IntoIterator;
 use std::marker;
 use std::mem;
 use std::ops::Deref;
-use std::slice;
-use std::str;
 
 const NUL: u8 = 0;
 
@@ -179,24 +182,31 @@ impl OwnedCString {
     }
 }
 
-impl fmt::Debug for OwnedCString {
+impl Debug for OwnedCString {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        (**self).fmt(f)
+        write!(f, "\"{}\"", escape_bytestring(self.to_bytes()))
     }
 }
 
 /// Error information about a failed string conversion due to an interior NUL
 /// in the source data.
-#[derive(Copy, Debug)]
 pub struct NulError {
-
-    /// The offset at which the first NUL occurs.
-    position: usize
+    position: usize,
+    bytes: Vec<u8>
 }
 
 impl NulError {
+
+    /// Returns the position of the first NUL byte in the byte sequence that
+    /// was attempted to convert to `CStrBuf`.
     pub fn nul_position(&self) -> usize { self.position }
+
+    /// Consumes this error and returns the bytes that were attempted to make
+    /// a C string with.
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.bytes
+    }
 }
 
 impl Error for NulError {
@@ -212,50 +222,18 @@ impl fmt::Display for NulError {
     }
 }
 
+impl fmt::Debug for NulError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // TODO: truncate output if too long
+        write!(f, "NulError {{ position: {}, bytes: \"{}\" }}",
+               self.position, escape_bytestring(&self.bytes))
+    }
+}
+
 impl FromError<NulError> for IoError {
     fn from_error(err: NulError) -> IoError {
         IoError::new(InvalidInput, "invalid data for C string: contains a NUL byte",
                      Some(format!("NUL at position {}", err.position)))
-    }
-}
-
-/// A possible error value from the `CStrBuf::from_vec` function.
-#[derive(Debug)]
-pub struct IntoCStrError {
-    cause: NulError,
-    bytes: Vec<u8>
-}
-
-impl IntoCStrError {
-
-    /// Access the `NulError` that is the cause of this error.
-    pub fn nul_error(&self) -> NulError {
-        self.cause
-    }
-
-    /// Consume this error, returning the bytes that were attempted to make
-    /// a C string with.
-    pub fn into_bytes(self) -> Vec<u8> {
-        self.bytes
-    }
-}
-
-impl Error for IntoCStrError {
-
-    fn description(&self) -> &str {
-        self.cause.description()
-    }
-}
-
-impl fmt::Display for IntoCStrError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.cause)
-    }
-}
-
-impl FromError<IntoCStrError> for IoError {
-    fn from_error(err: IntoCStrError) -> IoError {
-        FromError::from_error(err.nul_error())
     }
 }
 
@@ -271,48 +249,13 @@ enum CStrData {
 ///
 /// Values of this type can be obtained by conversion from Rust strings and
 /// byte slices.
+///
+/// This type serves the same purpose as `std::ffi::CString`, but provides
+/// in-place optimization for small strings and different ergonomics in the
+/// ways `CStrBuf` values can be constructed.
 #[derive(Clone)]
 pub struct CStrBuf {
     data: CStrData
-}
-
-/// A type to denote null-terminated string data borrowed under a reference.
-///
-/// `CStr` is only used by reference, e.g. as a parameter in a safe function
-/// proxying its FFI counterpart.
-#[repr(packed)]
-pub struct CStr {
-    chars: [libc::c_char]
-}
-
-fn bytes_into_c_str(s: &[u8]) -> CStrBuf {
-    let mut out = CStrBuf {
-        data: unsafe { blank_str_data() }
-    };
-    if !copy_in_place(s, &mut out.data) {
-        out = vec_into_c_str(s.to_vec());
-    }
-    out
-}
-
-#[inline]
-unsafe fn blank_str_data() -> CStrData {
-    CStrData::InPlace(mem::uninitialized())
-}
-
-fn copy_in_place(s: &[u8], out: &mut CStrData) -> bool {
-    let len = s.len();
-    if len >= IN_PLACE_SIZE {
-        return false;
-    }
-    match *out {
-        CStrData::InPlace(ref mut buf) => {
-            slice::bytes::copy_memory(buf, s);
-            buf[len] = 0;
-        }
-        _ => unreachable!()
-    }
-    true
 }
 
 fn vec_into_c_str(mut v: Vec<u8>) -> CStrBuf {
@@ -356,28 +299,96 @@ macro_rules! c_str {
         // literal out of bytestring or string literals. Otherwise, we could
         // use from_static_bytes and accept byte strings as well.
         // See https://github.com/rust-lang/rfcs/pull/566
-        $crate::CStr::from_static_str(concat!($lit, "\0"))
+        unsafe {
+            std::ffi::CStr::from_ptr(concat!($lit, "\0").as_ptr()
+                                        as *const libc::c_char)
+        }
     }
 }
 
 impl CStrBuf {
 
-    /// Create a `CStrBuf` by copying a byte slice.
+    /// Create a `CStrBuf` by consuming an iterable source of bytes.
     ///
     /// # Failure
     ///
-    /// Returns `Err` if the byte slice contains an interior NUL byte.
-    pub fn from_bytes(s: &[u8]) -> Result<CStrBuf, NulError> {
-        if let Some(pos) = s.position_elem(&NUL) {
-            return Err(NulError { position: pos });
+    /// Returns `Err` if the source contains an interior NUL byte.
+    pub fn from_iter<I>(iterable: I) -> Result<CStrBuf, NulError>
+        where I: IntoIterator<Item=u8>
+    {
+        fn nul_error<I>(mut collected: Vec<u8>, remaining: I) -> NulError
+            where I: Iterator<Item=u8>
+        {
+            let pos = collected.len();
+            collected.push(NUL);
+            collected.extend(remaining);
+            NulError { position: pos, bytes: collected }
         }
-        Ok(bytes_into_c_str(s))
-    }
 
-    /// Create a `CStrBuf` by copying a byte slice,
-    /// without checking for interior NUL characters.
-    pub unsafe fn from_bytes_unchecked(s: &[u8]) -> CStrBuf {
-        bytes_into_c_str(s)
+        let mut iter = iterable.into_iter();
+        let mut vec: Vec<u8> = match iter.size_hint() {
+            (_, Some(len)) if len < IN_PLACE_SIZE => {
+                // The iterator promises the items will fit into the
+                // in-place variant.
+                let mut buf: [u8; IN_PLACE_SIZE]
+                           = unsafe { mem::uninitialized() };
+                for i in 0 .. len + 1 {
+                    match iter.next() {
+                        Some(NUL) => {
+                            return Err(nul_error(buf[.. i].to_vec(), iter));
+                        }
+                        Some(c) => {
+                            buf[i] = c;
+                        }
+                        None => {
+                            buf[i] = NUL;
+                            return Ok(CStrBuf {
+                                    data: CStrData::InPlace(buf)
+                                });
+                        }
+                    }
+                }
+                // The upper bound on iterator length was a lie.
+                // Copy the collected buffer into the vector
+                // that the owned collection path will continue with
+                let mut vec = Vec::<u8>::with_capacity(len + 2);
+                vec.extend(buf[.. len + 1].iter().cloned());
+                vec
+            }
+            (lower, _) => {
+                Vec::with_capacity(lower + 1)
+            }
+        };
+        // Loop invariant: vec.len() < vec.capacity()
+        loop {
+            match iter.next() {
+                None => {
+                    break;
+                }
+                Some(NUL) => {
+                    return Err(nul_error(vec, iter));
+                }
+                Some(c) => {
+                    let len = vec.len();
+                    unsafe {
+                        *vec.get_unchecked_mut(len) = c;
+                        vec.set_len(len + 1);
+                    }
+                    if vec.len() == vec.capacity() {
+                        // Get capacity for some more iterations and continue
+                        vec.reserve(1);
+                    }
+                }
+            }
+        }
+        {
+            let len = vec.len();
+            unsafe {
+                *vec.get_unchecked_mut(len) = NUL;
+                vec.set_len(len + 1);
+            }
+        }
+        Ok(CStrBuf { data: CStrData::Owned(vec) })
     }
 
     /// Create a `CStrBuf` by copying a string slice.
@@ -387,14 +398,7 @@ impl CStrBuf {
     /// Returns `Err` if the string contains an interior NUL character.
     #[inline]
     pub fn from_str(s: &str) -> Result<CStrBuf, NulError> {
-        CStrBuf::from_bytes(s.as_bytes())
-    }
-
-    /// Create a `CStrBuf` by copying a string slice,
-    /// without checking for interior NUL characters.
-    #[inline]
-    pub unsafe fn from_str_unchecked(s: &str) -> CStrBuf {
-        CStrBuf::from_bytes_unchecked(s.as_bytes())
+        CStrBuf::from_iter(s.as_bytes().iter().cloned())
     }
 
     /// Consumes a byte vector to create `CStrBuf`, taking care to avoid
@@ -404,12 +408,9 @@ impl CStrBuf {
     ///
     /// If the given vector contains a NUL byte, then an error containing
     /// the original vector and `NulError` information is returned.
-    pub fn from_vec(vec: Vec<u8>) -> Result<CStrBuf, IntoCStrError> {
-        if let Some(pos) = vec[..].position_elem(&NUL) {
-            return Err(IntoCStrError {
-                cause: NulError { position: pos },
-                bytes: vec
-            });
+    pub fn from_vec(vec: Vec<u8>) -> Result<CStrBuf, NulError> {
+        if let Some(pos) = vec.position_elem(&NUL) {
+            return Err(NulError {position: pos, bytes: vec});
         }
         Ok(vec_into_c_str(vec))
     }
@@ -421,12 +422,12 @@ impl CStrBuf {
 
     /// Converts `self` into a byte vector, potentially saving an allocation.
     pub fn into_vec(mut self) -> Vec<u8> {
-        let mut data = unsafe { blank_str_data() };
-        mem::swap(&mut self.data, &mut data);
-        match data {
+        match mem::replace(&mut self.data,
+                           CStrData::InPlace(unsafe { mem::uninitialized() }))
+        {
             CStrData::Owned(mut v) => {
-                let len = v.len() - 1;
-                v.truncate(len);
+                let len = v.len();
+                v.truncate(len - 1);
                 v
             }
             CStrData::InPlace(ref a) => {
@@ -446,137 +447,6 @@ impl CStrBuf {
 impl fmt::Debug for CStrBuf {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "\"{}\"", escape_bytestring(self.as_bytes()))
-    }
-}
-
-impl CStr {
-
-    /// Constructs a `CStr` reference from a raw pointer to a
-    /// null-terminated string.
-    ///
-    /// This function is unsafe because there is no guarantee of the validity
-    /// of the pointer `raw` or a guarantee that a NUL terminator will be found.
-    /// Also there are no compile-time checks whether the lifetime as inferred
-    /// is a suitable lifetime for the returned slice.
-    ///
-    /// # Caveat
-    ///
-    /// The lifetime of the returned reference is inferred from its usage.
-    /// This may be incorrect in many cases. Consider this example:
-    ///
-    /// ```no_run
-    /// #[macro_use]
-    /// extern crate c_string;
-    ///
-    /// extern crate libc;
-    /// extern "C" {
-    ///     fn strdup(source: *const libc::c_char) -> *mut libc::c_char;
-    /// }
-    ///
-    /// use c_string::CStr;
-    ///
-    /// fn main() {
-    ///     let ptr = unsafe { strdup(c_str!("Hello!").as_ptr()) };
-    ///
-    ///     let s = unsafe { CStr::from_ptr(ptr).to_bytes() };
-    ///
-    ///     unsafe { libc::free(ptr as *mut libc::c_void) };
-    ///
-    ///     let guess_what = s[0];
-    ///     // The lifetime of s is inferred to extend to the line above
-    /// }
-    /// ```
-    ///
-    /// To prevent accidental misuse, the lifetime should be restricted
-    /// in some way. This can be a helper function or method taking the
-    /// lifetime from a 'host' value, when available. In other cases, explicit
-    /// annotation may be used.
-    #[inline]
-    pub unsafe fn from_ptr<'a>(raw: *const libc::c_char) -> &'a CStr {
-        let inner = slice::from_raw_parts(raw, 1);
-        mem::transmute(inner)
-    }
-
-    /// Create a `CStr` reference out of a static byte array.
-    ///
-    /// This function can be used with null-terminated byte string literals.
-    /// For non-literal data, prefer `CStrBuf::from_bytes`, since that
-    /// constructor checks for interior NUL bytes.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the byte array is not null-terminated.
-    pub fn from_static_bytes(bytes: &'static [u8]) -> &'static CStr {
-        assert!(bytes.last() == Some(&NUL),
-                "static byte string is not null-terminated: \"{}\"",
-                escape_bytestring(bytes));
-        let ptr = bytes.as_ptr() as *const libc::c_char;
-        unsafe { CStr::from_ptr(ptr) }
-    }
-
-    /// Create a `CStr` reference out of a static string.
-    ///
-    /// This function can be used with null-terminated string literals.
-    /// For non-literal data, prefer `CStrBuf::from_str`, since that
-    /// constructor checks for interior NUL characters.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the string is not null-terminated.
-    pub fn from_static_str(s: &'static str) -> &'static CStr {
-        assert!(s.ends_with("\0"),
-                "static string is not null-terminated: \"{}\"", s);
-        let ptr = s.as_ptr() as *const libc::c_char;
-        unsafe { CStr::from_ptr(ptr) }
-    }
-
-    /// Returns a raw pointer to the null-terminated C string.
-    ///
-    /// The returned pointer can only be considered valid
-    /// during the lifetime of the `CStr` value.
-    #[inline]
-    pub fn as_ptr(&self) -> *const libc::c_char {
-        self.chars.as_ptr()
-    }
-
-    /// Scans the string to get a byte slice of its contents.
-    ///
-    /// The returned slice does not include the terminating NUL byte.
-    pub fn to_bytes(&self) -> &[u8] {
-        let ptr = self.as_ptr();
-        unsafe {
-            slice::from_raw_parts(ptr as *const u8, libc::strlen(ptr) as usize)
-        }
-    }
-
-    /// Scans the string as UTF-8 string slice.
-    ///
-    /// # Failure
-    ///
-    /// Returns `Err` with information on the conversion error if the string is
-    /// not valid UTF-8.
-    #[inline]
-    pub fn to_utf8(&self) -> Result<&str, str::Utf8Error> {
-        str::from_utf8(self.to_bytes())
-    }
-
-    /// Returns an iterator over the string's bytes.
-    #[inline]
-    pub fn iter<'a>(&'a self) -> CChars<'a> {
-        CChars {
-            ptr: self.as_ptr(),
-            lifetime: marker::PhantomData
-        }
-    }
-
-    /// Returns true if the wrapped string is empty.
-    #[inline]
-    pub fn is_empty(&self) -> bool { self.chars[0] == 0 }
-}
-
-impl fmt::Debug for CStr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "\"{}\"", escape_bytestring(self.to_bytes()))
     }
 }
 
@@ -603,6 +473,12 @@ impl Deref for CStrBuf {
 pub struct CChars<'a> {
     ptr: *const libc::c_char,
     lifetime: marker::PhantomData<&'a [libc::c_char]>,
+}
+
+impl<'a> CChars<'a> {
+    pub fn from_c_str(s: &'a CStr) -> CChars<'a> {
+        CChars { ptr: s.as_ptr(), lifetime: marker::PhantomData }
+    }
 }
 
 impl<'a> Iterator for CChars<'a> {

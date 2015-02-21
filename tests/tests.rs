@@ -9,9 +9,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#![feature(collections)]
 #![feature(core)]
 #![feature(io)]
 #![feature(libc)]
+#![feature(std_misc)]
 #![feature(test)]
 
 #[macro_use]
@@ -21,12 +23,13 @@ extern crate test;
 extern crate libc;
 
 use std::error::FromError;
+use std::ffi::CStr;
 use std::io::Error as IoError;
 use std::io::ErrorKind::InvalidInput;
 use std::iter::Iterator;
 use std::ptr;
 
-use c_string::{CStr, CStrBuf, OwnedCString};
+use c_string::{CStrBuf, OwnedCString, CChars};
 use c_string::{libc_free, parse_c_multistring};
 
 pub fn check_c_str(c_str: &CStr, expected: &[u8]) {
@@ -96,11 +99,11 @@ fn test_owned_c_string_as_ptr() {
 #[test]
 fn test_iterator() {
     let c_string = str_dup("");
-    let mut iter = c_string.iter();
+    let mut iter = CChars::from_c_str(&c_string);
     assert_eq!(iter.next(), None);
 
     let c_string = str_dup("hello");
-    let mut iter = c_string.iter();
+    let mut iter = CChars::from_c_str(&c_string);
     assert_eq!(iter.next(), Some('h' as libc::c_char));
     assert_eq!(iter.next(), Some('e' as libc::c_char));
     assert_eq!(iter.next(), Some('l' as libc::c_char));
@@ -110,20 +113,28 @@ fn test_iterator() {
 }
 
 #[test]
-fn test_c_str_buf_from_bytes() {
-    let c_str = CStrBuf::from_bytes(b"").unwrap();
-    check_c_str(&c_str, b"");
+fn test_c_str_buf_from_iter() {
+    let test_strings = [
+        b"",
+        b"foo\xFF",
+        b"Mary had a little \xD0\x0D, Little \xD0\x0D"  // Exercises the owned variant
+    ];
+    for bytes in test_strings.iter() {
+        let c_str = CStrBuf::from_iter(bytes.iter().cloned()).unwrap();
+        check_c_str(&c_str, bytes);
+    }
 
-    let c_str = CStrBuf::from_bytes(b"foo\xFF").unwrap();
-    check_c_str(&c_str, b"foo\xFF");
-
-    // Owned variant
-    let c_str = CStrBuf::from_bytes(b"Mary had a little \xD0\x0D, Little \xD0\x0D").unwrap();
-    check_c_str(&c_str, b"Mary had a little \xD0\x0D, Little \xD0\x0D");
-
-    let res = CStrBuf::from_bytes(b"got\0nul");
-    let err = res.err().unwrap();
-    assert_eq!(err.nul_position(), 3);
+    let test_strings = [
+        b"got\0nul",
+        b"Mary had a little lamb, Little \0"  // Exercises the owned variant
+    ];
+    for bytes in test_strings.iter() {
+        let res = CStrBuf::from_iter(bytes.iter().cloned());
+        let err = res.err().unwrap();
+        assert_eq!(err.nul_position(), bytes.position_elem(&0u8).unwrap());
+        let vec = err.into_bytes();
+        assert_eq!(&vec, bytes);
+    }
 }
 
 #[test]
@@ -141,6 +152,8 @@ fn test_c_str_buf_from_str() {
     let res = CStrBuf::from_str("got\0nul");
     let err = res.err().unwrap();
     assert_eq!(err.nul_position(), 3);
+    let bytes = err.into_bytes();
+    assert_eq!(bytes, b"got\0nul");
 }
 
 #[test]
@@ -154,21 +167,27 @@ fn test_io_error_from_nul_error() {
 
 #[test]
 fn test_c_str_buf_from_vec() {
-    let c_str = CStrBuf::from_vec(b"".to_vec()).unwrap();
-    check_c_str(&c_str, b"");
+    let test_strings = [
+        b"",
+        b"foo\xFF",
+        b"Mary had a little \xD0\x0D, Little \xD0\x0D"  // Exercises the owned variant
+    ];
+    for bytes in test_strings.iter() {
+        let c_str = CStrBuf::from_vec(bytes.to_vec()).unwrap();
+        check_c_str(&c_str, bytes);
+    }
 
-    let c_str = CStrBuf::from_vec(b"hello".to_vec()).unwrap();
-    check_c_str(&c_str, b"hello");
-
-    // Owned variant
-    let c_str = CStrBuf::from_vec(b"Mary had a little lamb, Little lamb".to_vec()).unwrap();
-    check_c_str(&c_str, b"Mary had a little lamb, Little lamb");
-
-    let res = CStrBuf::from_vec(b"got\0nul".to_vec());
-    let err = res.err().unwrap();
-    assert_eq!(err.nul_error().nul_position(), 3);
-    let vec = err.into_bytes();
-    assert_eq!(&vec[..], b"got\0nul");
+    let test_strings = [
+        b"got\0nul",
+        b"Mary had a little lamb, Little \0"  // Exercises the owned variant
+    ];
+    for bytes in test_strings.iter() {
+        let res = CStrBuf::from_vec(bytes.to_vec());
+        let err = res.err().unwrap();
+        assert_eq!(err.nul_position(), bytes.position_elem(&0u8).unwrap());
+        let vec = err.into_bytes();
+        assert_eq!(&vec, bytes);
+    }
 }
 
 #[test]
@@ -188,23 +207,19 @@ fn test_c_str_buf_into_vec() {
     let c_str = CStrBuf::from_str("hello").unwrap();
     let vec = c_str.into_vec();
     assert_eq!(&vec[..], b"hello");
-    let c_str = CStrBuf::from_bytes(b"foo\xFF").unwrap();
+    let bytes = b"foo\xFF";
+    let c_str = CStrBuf::from_iter(bytes.iter().cloned()).unwrap();
     let vec = c_str.into_vec();
-    assert_eq!(&vec[..], b"foo\xFF");
+    assert_eq!(&vec[..], bytes);
 
     // Owned variant
     let c_str = CStrBuf::from_str("Mary had a little lamb, Little lamb").unwrap();
     let vec = c_str.into_vec();
     assert_eq!(&vec[..], b"Mary had a little lamb, Little lamb");
-    let c_str = CStrBuf::from_bytes(b"Mary had a little \xD0\x0D, Little \xD0\x0D").unwrap();
+    let bytes = b"Mary had a little \xD0\x0D, Little \xD0\x0D";
+    let c_str = CStrBuf::from_iter(bytes.iter().cloned()).unwrap();
     let vec = c_str.into_vec();
-    assert_eq!(&vec[..], b"Mary had a little \xD0\x0D, Little \xD0\x0D");
-}
-
-#[test]
-fn test_c_str_is_empty() {
-    let c_str = CStrBuf::from_str("").unwrap();
-    assert!(c_str.is_empty());
+    assert_eq!(&vec[..], bytes);
 }
 
 #[test]
@@ -215,29 +230,6 @@ fn test_owned_c_string_to_bytes() {
     assert_eq!(c_str.to_bytes(), b"");
     let c_str = bytes_dup(b"foo\xFF");
     assert_eq!(c_str.to_bytes(), b"foo\xFF");
-}
-
-#[test]
-fn test_owned_c_string_to_utf8() {
-    let c_str = str_dup("hello");
-    assert_eq!(c_str.to_utf8(), Ok("hello"));
-    let c_str = str_dup("");
-    assert_eq!(c_str.to_utf8(), Ok(""));
-    let c_str = bytes_dup(b"foo\xFF");
-    assert!(c_str.to_utf8().is_err());
-}
-
-#[test]
-fn test_c_str_debug() {
-    let c_str = c_str!("hello");
-    let msg = format!("{:?}", c_str);
-    assert_eq!(msg, "\"hello\"");
-    let c_str = c_str!("");
-    let msg = format!("{:?}", c_str);
-    assert_eq!(msg, "\"\"");
-    let c_str = CStr::from_static_bytes(b"foo\xFF\0");
-    let msg = format!("{:?}", c_str);
-    assert_eq!(msg, r#""foo\xff""#);
 }
 
 #[test]
@@ -259,16 +251,4 @@ fn test_c_string_new_fail() {
     let _c_str: OwnedCString = unsafe {
         OwnedCString::new(ptr::null(), libc_free)
     };
-}
-
-#[test]
-#[should_fail]
-fn test_from_static_bytes_fail() {
-    let _c_str = CStr::from_static_bytes(b"no nul");
-}
-
-#[test]
-#[should_fail]
-fn test_from_static_str_fail() {
-    let _c_str = CStr::from_static_str("no nul");
 }

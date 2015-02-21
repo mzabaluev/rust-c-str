@@ -17,15 +17,7 @@ extern crate test;
 
 use test::Bencher;
 
-use c_string::{CStr, CStrBuf};
-
-#[inline(always)]
-fn smoke_c_str(s: &CStr, expected: &str) {
-    let p = s.as_ptr();
-    let off = expected.len() / 2;
-    let c = unsafe { *p.offset(off as isize) } as u8;
-    assert_eq!(c, expected.as_bytes()[off]);
-}
+use c_string::CStrBuf;
 
 static S_SHORT: &'static str = "Mary";
 static S_MEDIUM: &'static str = "Mary had a little lamb, Little lamb";
@@ -39,8 +31,7 @@ static S_LONG: &'static str = "\
 
 fn bench_c_str_buf_from_str(b: &mut Bencher, s: &str) {
     b.iter(|| {
-        let c_str = CStrBuf::from_str(s).unwrap();
-        smoke_c_str(&*c_str, s);
+        CStrBuf::from_str(s)
     });
 }
 
@@ -61,8 +52,7 @@ fn bench_c_str_buf_from_str_long(b: &mut Bencher) {
 
 fn bench_c_str_buf_from_str_unchecked(b: &mut Bencher, s: &str) {
     b.iter(|| {
-        let c_str = unsafe { CStrBuf::from_str_unchecked(s) };
-        smoke_c_str(&*c_str, s);
+        unsafe { CStrBuf::from_vec_unchecked(s.as_bytes().to_vec()) }
     });
 }
 
@@ -86,7 +76,6 @@ fn bench_c_str_buf_from_vec_and_back(b: &mut Bencher, s: &str) {
     b.iter(move || {
         let vec = shelf.take().unwrap();
         let c_str = CStrBuf::from_vec(vec).unwrap();
-        smoke_c_str(&*c_str, s);
         shelf = Some(c_str.into_vec());
     });
 }
@@ -111,7 +100,6 @@ fn bench_c_str_buf_from_vec_unchecked_and_back(b: &mut Bencher, s: &str) {
     b.iter(move || {
         let vec = shelf.take().unwrap();
         let c_str = unsafe { CStrBuf::from_vec_unchecked(vec) };
-        smoke_c_str(&*c_str, s);
         shelf = Some(c_str.into_vec());
     });
 }
