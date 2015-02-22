@@ -52,7 +52,7 @@ fn bench_c_str_buf_from_str_long(b: &mut Bencher) {
 
 fn bench_c_str_buf_from_str_unchecked(b: &mut Bencher, s: &str) {
     b.iter(|| {
-        unsafe { CStrBuf::from_vec_unchecked(s.as_bytes().to_vec()) }
+        unsafe { CStrBuf::from_iter_unchecked(s.as_bytes().iter().cloned()) }
     });
 }
 
