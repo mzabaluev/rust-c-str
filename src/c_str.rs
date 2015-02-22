@@ -378,7 +378,8 @@ impl CStrBuf {
                     }
                     if vec.len() == vec.capacity() {
                         // Get capacity for some more iterations and continue
-                        vec.reserve(1);
+                        let (lower, _) = iter.size_hint();
+                        vec.reserve(lower + 1);
                     }
                 }
             }
