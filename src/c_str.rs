@@ -73,6 +73,8 @@
 //! }
 //! ```
 
+#![allow(unstable_features)]
+
 #![feature(collections)]
 #![feature(core)]
 #![feature(io)]

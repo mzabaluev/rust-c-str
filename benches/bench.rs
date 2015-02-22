@@ -9,6 +9,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#![allow(unstable_features)]
+
 #![feature(test)]
 
 extern crate c_string;
