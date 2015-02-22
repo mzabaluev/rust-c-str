@@ -391,41 +391,6 @@ impl CStrBuf {
         Ok(CStrBuf { data: CStrData::Owned(vec) })
     }
 
-    /// Like `from_iter`, but without checking for interior NUL bytes
-    pub unsafe fn from_iter_unchecked<I>(iterable: I) -> CStrBuf
-        where I: IntoIterator<Item=u8>
-    {
-        let mut iter = iterable.into_iter();
-        let mut vec: Vec<u8> = match iter.size_hint() {
-            (_, Some(len)) if len < IN_PLACE_SIZE => {
-                // The iterator promises the items will fit into the
-                // in-place variant.
-                let str_data = CStrData::InPlace({
-                    let mut buf: [u8; IN_PLACE_SIZE] = mem::uninitialized();
-                    for dest in buf.iter_mut() {
-                        match iter.next() {
-                            Some(c) => {
-                                *dest = c;
-                            }
-                            None => {
-                                *dest = NUL;
-                                break;
-                            }
-                        }
-                    }
-                    buf
-                });
-                return CStrBuf { data: str_data };
-            }
-            (lower, _) => {
-                Vec::with_capacity(lower + 1)
-            }
-        };
-        vec.extend(iter);
-        vec.push(NUL);
-        CStrBuf { data: CStrData::Owned(vec) }
-    }
-
     /// Create a `CStrBuf` by copying a string slice.
     ///
     /// # Failure

@@ -50,27 +50,6 @@ fn bench_c_str_buf_from_str_long(b: &mut Bencher) {
     bench_c_str_buf_from_str(b, S_LONG);
 }
 
-fn bench_c_str_buf_from_str_unchecked(b: &mut Bencher, s: &str) {
-    b.iter(|| {
-        unsafe { CStrBuf::from_iter_unchecked(s.as_bytes().iter().cloned()) }
-    });
-}
-
-#[bench]
-fn bench_c_str_buf_from_str_unchecked_short(b: &mut Bencher) {
-    bench_c_str_buf_from_str_unchecked(b, S_SHORT);
-}
-
-#[bench]
-fn bench_c_str_buf_from_str_unchecked_medium(b: &mut Bencher) {
-    bench_c_str_buf_from_str_unchecked(b, S_MEDIUM);
-}
-
-#[bench]
-fn bench_c_str_buf_from_str_unchecked_long(b: &mut Bencher) {
-    bench_c_str_buf_from_str_unchecked(b, S_LONG);
-}
-
 fn bench_c_str_buf_from_vec_and_back(b: &mut Bencher, s: &str) {
     let mut shelf: Option<Vec<u8>> = Some(s.as_bytes().to_vec());
     b.iter(move || {
