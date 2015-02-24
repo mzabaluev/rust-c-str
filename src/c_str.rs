@@ -96,6 +96,8 @@ use std::marker;
 use std::mem;
 use std::ops::Deref;
 
+pub use libc::c_char;
+
 const NUL: u8 = 0;
 
 /// Representation of an allocated C String.
@@ -103,7 +105,7 @@ const NUL: u8 = 0;
 /// This structure wraps a raw pointer to a null-terminated C string
 /// and a destructor function to invoke when dropped.
 pub struct OwnedCString {
-    ptr: *const libc::c_char,
+    ptr: *const c_char,
     dtor: DestroyFn
 }
 
@@ -153,7 +155,7 @@ impl hash::Hash for OwnedCString {
 }
 
 /// Signature for deallocation functions used with `OwnedCString::new`.
-pub type DestroyFn = unsafe fn(*const libc::c_char);
+pub type DestroyFn = unsafe fn(*const c_char);
 
 /// The deallocation function that delegates to `libc::free`.
 ///
@@ -165,7 +167,7 @@ pub type DestroyFn = unsafe fn(*const libc::c_char);
 /// On some platforms, such as Windows, the standard C allocator used by
 /// non-Rust libraries is not necessarily the same as the one linked
 /// with the crate `libc`.
-pub unsafe fn libc_free(ptr: *const libc::c_char) {
+pub unsafe fn libc_free(ptr: *const c_char) {
     libc::free(ptr as *mut libc::c_void);
 }
 
@@ -178,7 +180,7 @@ impl OwnedCString {
     ///# Panics
     ///
     /// Panics if `ptr` is null.
-    pub unsafe fn new(ptr: *const libc::c_char, dtor: DestroyFn) -> OwnedCString {
+    pub unsafe fn new(ptr: *const c_char, dtor: DestroyFn) -> OwnedCString {
         assert!(!ptr.is_null());
         OwnedCString { ptr: ptr, dtor: dtor }
     }
@@ -303,7 +305,7 @@ macro_rules! c_str {
         // See https://github.com/rust-lang/rfcs/pull/566
         unsafe {
             std::ffi::CStr::from_ptr(concat!($lit, "\0").as_ptr()
-                                        as *const libc::c_char)
+                                        as *const $crate::c_char)
         }
     }
 }
@@ -461,7 +463,7 @@ impl Deref for CStrBuf {
         let p = match self.data {
             CStrData::Owned(ref v)   => (*v).as_ptr(),
             CStrData::InPlace(ref a) => a.as_ptr()
-        } as *const libc::c_char;
+        } as *const c_char;
         unsafe { CStr::from_ptr(p) }
     }
 }
@@ -474,8 +476,8 @@ impl Deref for CStrBuf {
 /// Use with the `std::iter` module.
 #[derive(Copy)]
 pub struct CChars<'a> {
-    ptr: *const libc::c_char,
-    lifetime: marker::PhantomData<&'a [libc::c_char]>,
+    ptr: *const c_char,
+    lifetime: marker::PhantomData<&'a [c_char]>,
 }
 
 impl<'a> CChars<'a> {
@@ -486,9 +488,9 @@ impl<'a> CChars<'a> {
 
 impl<'a> Iterator for CChars<'a> {
 
-    type Item = libc::c_char;
+    type Item = c_char;
 
-    fn next(&mut self) -> Option<libc::c_char> {
+    fn next(&mut self) -> Option<c_char> {
         let ch = unsafe { *self.ptr };
         if ch == 0 {
             None
@@ -510,7 +512,7 @@ impl<'a> Iterator for CChars<'a> {
 ///
 /// The specified closure is invoked with each string that
 /// is found, and the number of strings found is returned.
-pub unsafe fn parse_c_multistring<F>(buf: *const libc::c_char,
+pub unsafe fn parse_c_multistring<F>(buf: *const c_char,
                                      limit: Option<usize>,
                                      mut f: F) -> usize
     where F: FnMut(&[u8])
