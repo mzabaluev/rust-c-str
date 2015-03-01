@@ -48,7 +48,7 @@ pub fn check_c_str(c_str: &CStr, expected: &[u8]) {
 unsafe fn bytes_dup_raw(s: &[u8]) -> *const libc::c_char {
     let len = s.len();
     let dup = libc::malloc((len + 1) as libc::size_t) as *mut u8;
-    ptr::copy_nonoverlapping_memory(dup, s.as_ptr(), len);
+    ptr::copy_nonoverlapping(dup, s.as_ptr(), len);
     *dup.offset(len as isize) = 0;
     dup as *const libc::c_char
 }
