@@ -79,7 +79,6 @@
 #![feature(core)]
 #![feature(io)]
 #![feature(libc)]
-#![feature(std_misc)]
 
 extern crate libc;
 

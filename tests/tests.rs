@@ -15,7 +15,6 @@
 #![feature(core)]
 #![feature(io)]
 #![feature(libc)]
-#![feature(std_misc)]
 #![feature(test)]
 
 #[macro_use]
