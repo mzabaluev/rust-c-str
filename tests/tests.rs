@@ -163,7 +163,6 @@ fn test_io_error_from_nul_error() {
     let err = res.err().unwrap();
     let io_err: IoError = FromError::from_error(err);
     assert_eq!(io_err.kind(), InvalidInput);
-    assert!(io_err.detail().is_some());
 }
 
 #[test]
@@ -197,7 +196,6 @@ fn test_io_error_from_into_c_str_error() {
     let err = res.err().unwrap();
     let io_err: IoError = FromError::from_error(err);
     assert_eq!(io_err.kind(), InvalidInput);
-    assert!(io_err.detail().is_some());
 }
 
 #[test]
@@ -247,7 +245,7 @@ fn test_owned_c_string_debug() {
 }
 
 #[test]
-#[should_fail]
+#[should_panic]
 fn test_c_string_new_fail() {
     let _c_str: OwnedCString = unsafe {
         OwnedCString::new(ptr::null(), libc_free)
