@@ -12,8 +12,6 @@
 #![allow(unstable_features)]
 
 #![feature(collections)]
-#![feature(core)]
-#![feature(io)]
 #![feature(libc)]
 #![feature(test)]
 
@@ -115,7 +113,7 @@ fn test_iterator() {
 
 #[test]
 fn test_c_str_buf_from_iter() {
-    let test_strings = [
+    let test_strings: &[&'static [u8]] = &[
         b"",
         b"foo\xFF",
         b"Mary had a little \xD0\x0D, Little \xD0\x0D"  // Exercises the owned variant
@@ -125,7 +123,7 @@ fn test_c_str_buf_from_iter() {
         check_c_str(&c_str, bytes);
     }
 
-    let test_strings = [
+    let test_strings: &[&'static [u8]] = &[
         b"got\0nul",
         b"Mary had a little lamb, Little \0"  // Exercises the owned variant
     ];
@@ -167,7 +165,7 @@ fn test_io_error_from_nul_error() {
 
 #[test]
 fn test_c_str_buf_from_vec() {
-    let test_strings = [
+    let test_strings: &[&'static [u8]] = &[
         b"",
         b"foo\xFF",
         b"Mary had a little \xD0\x0D, Little \xD0\x0D"  // Exercises the owned variant
@@ -177,7 +175,7 @@ fn test_c_str_buf_from_vec() {
         check_c_str(&c_str, bytes);
     }
 
-    let test_strings = [
+    let test_strings: &[&'static [u8]] = &[
         b"got\0nul",
         b"Mary had a little lamb, Little \0"  // Exercises the owned variant
     ];
@@ -214,7 +212,7 @@ fn test_c_str_buf_into_vec() {
     // Owned variant
     let c_str = CStrBuf::from_str("Mary had a little lamb, Little lamb").unwrap();
     let vec = c_str.into_vec();
-    assert_eq!(&vec[..], b"Mary had a little lamb, Little lamb");
+    assert_eq!(&vec[..], &b"Mary had a little lamb, Little lamb"[..]);
     let bytes = b"Mary had a little \xD0\x0D, Little \xD0\x0D";
     let c_str = CStrBuf::from_iter(bytes.iter().cloned()).unwrap();
     let vec = c_str.into_vec();
