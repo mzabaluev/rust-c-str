@@ -47,7 +47,7 @@
 //! An example of creating and using a C string would be:
 //!
 //! ```rust
-//! #![allow(unstable)]
+//! #![feature(libc)]
 //!
 //! extern crate c_string;
 //! extern crate libc;
@@ -73,10 +73,10 @@
 //! }
 //! ```
 
+#![allow(trivial_numeric_casts)]
 #![allow(unstable_features)]
 
 #![feature(collections)]
-#![feature(core)]
 #![feature(io)]
 #![feature(libc)]
 
@@ -284,7 +284,7 @@ fn escape_bytestring(s: &[u8]) -> String {
 /// # Example
 ///
 /// ```rust
-/// #![allow(unstable)]
+/// #![feature(libc)]
 ///
 /// #[macro_use]
 /// extern crate c_string;
