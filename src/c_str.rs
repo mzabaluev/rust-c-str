@@ -473,7 +473,6 @@ impl Deref for CStrBuf {
 /// returning the NUL.
 ///
 /// Use with the `std::iter` module.
-#[derive(Copy)]
 pub struct CChars<'a> {
     ptr: *const c_char,
     lifetime: marker::PhantomData<&'a [c_char]>,
@@ -484,6 +483,14 @@ impl<'a> CChars<'a> {
         CChars { ptr: s.as_ptr(), lifetime: marker::PhantomData }
     }
 }
+
+impl<'a> Clone for CChars<'a> {
+    fn clone(&self) -> CChars<'a> {
+        CChars { ptr: self.ptr, lifetime: marker::PhantomData }
+    }
+}
+
+impl<'a> Copy for CChars<'a> { }
 
 impl<'a> Iterator for CChars<'a> {
 
