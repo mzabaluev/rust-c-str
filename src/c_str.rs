@@ -82,7 +82,6 @@
 extern crate libc;
 
 use std::cmp::Ordering;
-use std::convert;
 use std::error::Error;
 use std::ffi::CStr;
 use std::fmt;
@@ -233,7 +232,7 @@ impl fmt::Debug for NulError {
     }
 }
 
-impl convert::From<NulError> for IoError {
+impl From<NulError> for IoError {
     fn from(err: NulError) -> IoError {
         IoError::new(InvalidInput,
             format!("invalid data for C string: NUL at position {}", err.position).as_ref())

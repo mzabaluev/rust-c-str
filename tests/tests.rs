@@ -21,7 +21,6 @@ extern crate c_string;
 extern crate test;
 extern crate libc;
 
-use std::convert;
 use std::ffi::CStr;
 use std::io::Error as IoError;
 use std::io::ErrorKind::InvalidInput;
@@ -159,7 +158,7 @@ fn test_c_str_buf_from_str() {
 fn test_io_error_from_nul_error() {
     let res = CStrBuf::from_str("got\0nul");
     let err = res.err().unwrap();
-    let io_err: IoError = convert::From::from(err);
+    let io_err = IoError::from(err);
     assert_eq!(io_err.kind(), InvalidInput);
 }
 
@@ -192,7 +191,7 @@ fn test_c_str_buf_from_vec() {
 fn test_io_error_from_into_c_str_error() {
     let res = CStrBuf::from_vec(b"got\0nul".to_vec());
     let err = res.err().unwrap();
-    let io_err: IoError = convert::From::from(err);
+    let io_err = IoError::from(err);
     assert_eq!(io_err.kind(), InvalidInput);
 }
 
