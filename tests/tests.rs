@@ -21,7 +21,7 @@ extern crate c_string;
 extern crate test;
 extern crate libc;
 
-use std::error::FromError;
+use std::convert;
 use std::ffi::CStr;
 use std::io::Error as IoError;
 use std::io::ErrorKind::InvalidInput;
@@ -45,7 +45,7 @@ pub fn check_c_str(c_str: &CStr, expected: &[u8]) {
 unsafe fn bytes_dup_raw(s: &[u8]) -> *const libc::c_char {
     let len = s.len();
     let dup = libc::malloc((len + 1) as libc::size_t) as *mut u8;
-    ptr::copy_nonoverlapping(dup, s.as_ptr(), len);
+    ptr::copy_nonoverlapping(s.as_ptr(), dup, len);
     *dup.offset(len as isize) = 0;
     dup as *const libc::c_char
 }
@@ -159,7 +159,7 @@ fn test_c_str_buf_from_str() {
 fn test_io_error_from_nul_error() {
     let res = CStrBuf::from_str("got\0nul");
     let err = res.err().unwrap();
-    let io_err: IoError = FromError::from_error(err);
+    let io_err: IoError = convert::From::from(err);
     assert_eq!(io_err.kind(), InvalidInput);
 }
 
@@ -192,7 +192,7 @@ fn test_c_str_buf_from_vec() {
 fn test_io_error_from_into_c_str_error() {
     let res = CStrBuf::from_vec(b"got\0nul".to_vec());
     let err = res.err().unwrap();
-    let io_err: IoError = FromError::from_error(err);
+    let io_err: IoError = convert::From::from(err);
     assert_eq!(io_err.kind(), InvalidInput);
 }
 

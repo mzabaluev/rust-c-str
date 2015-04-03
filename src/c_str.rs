@@ -77,13 +77,13 @@
 #![allow(unstable_features)]
 
 #![feature(collections)]
-#![feature(io)]
 #![feature(libc)]
 
 extern crate libc;
 
 use std::cmp::Ordering;
-use std::error::{Error, FromError};
+use std::convert;
+use std::error::Error;
 use std::ffi::CStr;
 use std::fmt;
 use std::fmt::Debug;
@@ -233,10 +233,10 @@ impl fmt::Debug for NulError {
     }
 }
 
-impl FromError<NulError> for IoError {
-    fn from_error(err: NulError) -> IoError {
-        IoError::new(InvalidInput, "invalid data for C string: contains a NUL byte",
-                     Some(format!("NUL at position {}", err.position)))
+impl convert::From<NulError> for IoError {
+    fn from(err: NulError) -> IoError {
+        IoError::new(InvalidInput,
+            format!("invalid data for C string: NUL at position {}", err.position).as_ref())
     }
 }
 
