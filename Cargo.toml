@@ -9,6 +9,9 @@ license = "Apache-2.0/MIT"
 keywords = ["C", "string"]
 repository = "https://github.com/mzabaluev/rust-c-str.git"
 
+[dependencies]
+libc = "0.1"
+
 [lib]
 name = "c_string"
 path = "src/c_str.rs"

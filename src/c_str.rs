@@ -77,7 +77,6 @@
 #![allow(unstable_features)]
 
 #![feature(collections)]
-#![feature(libc)]
 
 extern crate libc;
 

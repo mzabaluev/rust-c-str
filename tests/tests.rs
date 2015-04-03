@@ -12,7 +12,6 @@
 #![allow(unstable_features)]
 
 #![feature(collections)]
-#![feature(libc)]
 #![feature(test)]
 
 #[macro_use]
