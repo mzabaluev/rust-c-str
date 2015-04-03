@@ -479,12 +479,14 @@ pub struct CChars<'a> {
 }
 
 impl<'a> CChars<'a> {
+    #[inline]
     pub fn from_c_str(s: &'a CStr) -> CChars<'a> {
         CChars { ptr: s.as_ptr(), lifetime: marker::PhantomData }
     }
 }
 
 impl<'a> Clone for CChars<'a> {
+    #[inline]
     fn clone(&self) -> CChars<'a> {
         CChars { ptr: self.ptr, lifetime: marker::PhantomData }
     }
