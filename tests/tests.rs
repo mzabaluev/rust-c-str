@@ -9,12 +9,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(test)]
-
 #[macro_use]
 extern crate c_string;
 
-extern crate test;
 extern crate libc;
 
 use std::ffi::CStr;
