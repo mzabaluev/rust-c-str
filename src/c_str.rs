@@ -74,9 +74,6 @@
 //! ```
 
 #![allow(trivial_numeric_casts)]
-#![allow(unstable_features)]
-
-#![feature(collections)]
 
 extern crate libc;
 
@@ -259,6 +256,10 @@ pub struct CStrBuf {
     data: CStrData
 }
 
+fn find_nul(bytes: &[u8]) -> Option<usize> {
+    bytes.iter().position(|b| *b == NUL)
+}
+
 fn vec_into_c_str(mut v: Vec<u8>) -> CStrBuf {
     v.push(NUL);
     CStrBuf { data: CStrData::Owned(v) }
@@ -411,7 +412,7 @@ impl CStrBuf {
     /// If the given vector contains a NUL byte, then an error containing
     /// the original vector and `NulError` information is returned.
     pub fn from_vec(vec: Vec<u8>) -> Result<CStrBuf, NulError> {
-        if let Some(pos) = vec.position_elem(&NUL) {
+        if let Some(pos) = find_nul(&vec[..]) {
             return Err(NulError {position: pos, bytes: vec});
         }
         Ok(vec_into_c_str(vec))
@@ -433,7 +434,7 @@ impl CStrBuf {
                 v
             }
             CStrData::InPlace(ref a) => {
-                a[.. a.position_elem(&NUL).unwrap()].to_vec()
+                a[.. find_nul(a).unwrap()].to_vec()
             }
         }
     }
@@ -441,7 +442,7 @@ impl CStrBuf {
     fn as_bytes(&self) -> &[u8] {
         match self.data {
             CStrData::Owned(ref v) => &v[.. v.len() - 1],
-            CStrData::InPlace(ref a) => &a[.. a.position_elem(&NUL).unwrap()]
+            CStrData::InPlace(ref a) => &a[.. find_nul(a).unwrap()]
         }
     }
 }

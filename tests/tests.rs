@@ -9,9 +9,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![allow(unstable_features)]
-
-#![feature(collections)]
 #![feature(test)]
 
 #[macro_use]
@@ -128,7 +125,7 @@ fn test_c_str_buf_from_iter() {
     for bytes in test_strings.iter() {
         let res = CStrBuf::from_iter(bytes.iter().cloned());
         let err = res.err().unwrap();
-        assert_eq!(err.nul_position(), bytes.position_elem(&0u8).unwrap());
+        assert_eq!(err.nul_position(), bytes.iter().position(|b| *b == 0u8).unwrap());
         let vec = err.into_bytes();
         assert_eq!(&vec, bytes);
     }
@@ -180,7 +177,7 @@ fn test_c_str_buf_from_vec() {
     for bytes in test_strings.iter() {
         let res = CStrBuf::from_vec(bytes.to_vec());
         let err = res.err().unwrap();
-        assert_eq!(err.nul_position(), bytes.position_elem(&0u8).unwrap());
+        assert_eq!(err.nul_position(), bytes.iter().position(|b| *b == 0u8).unwrap());
         let vec = err.into_bytes();
         assert_eq!(&vec, bytes);
     }
