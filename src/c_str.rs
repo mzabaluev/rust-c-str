@@ -27,9 +27,12 @@
 /// Produce a `CStr` reference out of a static string literal.
 ///
 /// This macro provides a convenient way to use string literals in
-/// expressions where a `std::ffi::CStr` reference is expected.
+/// expressions where a `std::ffi::CStr` reference is accepted.
 /// The macro parameter does not need to end with `"\0"`, as the 0 byte is
 /// appended by the macro.
+///
+/// The lifetime of the output reference is inferred from the expansion
+/// site. This is always safe because the string is static and immutable.
 ///
 /// # Example
 ///
@@ -41,7 +44,8 @@
 /// extern crate libc;
 ///
 /// fn main() {
-///     unsafe { libc::puts(c_str!("Hello, world!").as_ptr()) };
+///     let s = c_str!("Hello, world!");
+///     unsafe { libc::puts(s.as_ptr()) };
 /// }
 /// ```
 #[macro_export]
