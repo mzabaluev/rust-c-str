@@ -1,17 +1,16 @@
 [package]
 
-name = "c_string"
-version = "0.7.0"
+name = "c_str_macro"
+version = "1.0.0"
 authors = ["Mikhail Zabaluev <mikhail.zabaluev@gmail.com>"]
-description = "C string helpers for Rust"
+description = "c_str macro to create C-compatible string literals"
 readme = "README.md"
 license = "Apache-2.0/MIT"
-keywords = ["C", "string"]
+keywords = ["C", "string", "macro"]
 repository = "https://github.com/mzabaluev/rust-c-str.git"
 
-[dependencies]
-libc = "0.1"
-
 [lib]
-name = "c_string"
 path = "src/c_str.rs"
+
+[dev-dependencies]
+libc = "0.2"

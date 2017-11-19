@@ -1,12 +1,13 @@
-# C string helpers for Rust
+# c_str! macro for Rust
 
-This library implements improvements over Rust's FFI facilities for
-null-terminated strings, as proposed in these RFCs:
+This macro-only crate provides the `c_str!` macro to facilitate creation
+of C-compatible string values from Rust string literals.
 
-* https://github.com/rust-lang/rfcs/pull/592
-* https://github.com/rust-lang/rfcs/pull/840
+## Legacy code
 
-On top of that, this crate provides RAII memory management helpers for
-foreign-allocated C-style strings, as well as more convenient transformation
-functions and macros that did not pass the rigors of the RFC process for
-inclusion in the Rust standard library.
+This repository also contains source code for crate `c_string`,
+which is no longer maintained. It provided some utility types to
+facilitate working with C-compatible strings in Rust, but most of
+them were poorly designed or do not fit well with the evolution
+of the language. The topmost commit for that crate is available
+under branch `c-string`.
