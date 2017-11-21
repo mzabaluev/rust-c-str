@@ -1,7 +1,7 @@
 [package]
 
 name = "c_str_macro"
-version = "1.0.2-dev"
+version = "1.0.2"
 authors = ["Mikhail Zabaluev <mikhail.zabaluev@gmail.com>"]
 description = "c_str macro to create C-compatible string literals"
 readme = "README.md"
