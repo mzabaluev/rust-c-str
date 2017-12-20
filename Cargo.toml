@@ -1,13 +1,16 @@
 [package]
 
 name = "c_string"
-version = "0.7.0"
+version = "0.7.1-obsolete"
 authors = ["Mikhail Zabaluev <mikhail.zabaluev@gmail.com>"]
 description = "C string helpers for Rust"
 readme = "README.md"
 license = "Apache-2.0/MIT"
 keywords = ["C", "string"]
 repository = "https://github.com/mzabaluev/rust-c-str.git"
+
+[badges]
+maintenance = { status = "deprecated" }
 
 [dependencies]
 libc = "0.1"
