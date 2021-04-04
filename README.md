@@ -1,5 +1,7 @@
 # c_str! macro for Rust
 
+![Maintenance Status](https://img.shields.io/badge/maintenance-as--is-yellowgreen.svg)
+
 This macro-only crate provides the `c_str!` macro to facilitate creation
 of C-compatible string values from Rust string literals.
 
