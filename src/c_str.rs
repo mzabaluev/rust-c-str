@@ -7,8 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![crate_name = "c_str_macro"]
-#![crate_type = "lib"]
+#![warn(clippy::all)]
 
 //! A macro to produce C-compatible string data from literals.
 //!
@@ -37,11 +36,7 @@
 /// # Example
 ///
 /// ```rust
-///
-/// #[macro_use]
-/// extern crate c_str_macro;
-///
-/// extern crate libc;
+/// use c_str_macro::c_str;
 ///
 /// fn main() {
 ///     let s = c_str!("Hello, world!");
