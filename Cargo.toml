@@ -13,7 +13,7 @@ repository = "https://github.com/mzabaluev/rust-c-str.git"
 maintenance = { status = "deprecated" }
 
 [dependencies]
-libc = "0.1"
+libc = "0.2"
 
 [lib]
 name = "c_string"
