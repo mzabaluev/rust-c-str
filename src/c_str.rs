@@ -9,8 +9,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![crate_name = "c_string"]
-#![crate_type = "lib"]
+#![warn(clippy::all)]
 
 //! This library provides helpers for creating and managing
 //! null-terminated strings for use with FFI calls. Most C APIs require
