@@ -85,7 +85,7 @@ use std::io::Error as IoError;
 use std::io::ErrorKind::InvalidInput;
 use std::iter::IntoIterator;
 use std::marker;
-use std::mem;
+use std::mem::{self, MaybeUninit};
 use std::ops::Deref;
 
 pub use libc::c_char;
@@ -98,7 +98,7 @@ const NUL: u8 = 0;
 /// and a destructor function to invoke when dropped.
 pub struct OwnedCString {
     ptr: *const c_char,
-    dtor: DestroyFn
+    dtor: DestroyFn,
 }
 
 impl Drop for OwnedCString {
@@ -109,7 +109,6 @@ impl Drop for OwnedCString {
 }
 
 impl Deref for OwnedCString {
-
     type Target = CStr;
 
     fn deref(&self) -> &CStr {
@@ -123,8 +122,7 @@ impl PartialEq for OwnedCString {
     }
 }
 
-impl Eq for OwnedCString {
-}
+impl Eq for OwnedCString {}
 
 impl PartialOrd for OwnedCString {
     #[inline]
@@ -141,7 +139,10 @@ impl Ord for OwnedCString {
 }
 
 impl hash::Hash for OwnedCString {
-    fn hash<H>(&self, state: &mut H) where H: hash::Hasher {
+    fn hash<H>(&self, state: &mut H)
+    where
+        H: hash::Hasher,
+    {
         self.to_bytes().hash(state)
     }
 }
@@ -164,7 +165,6 @@ pub unsafe fn libc_free(ptr: *const c_char) {
 }
 
 impl OwnedCString {
-
     /// Create an `OwnedCString` from a raw pointer and a destructor.
     ///
     /// The destructor will be invoked when the `OwnedCString` is dropped.
@@ -174,7 +174,10 @@ impl OwnedCString {
     /// Panics if `ptr` is null.
     pub unsafe fn new(ptr: *const c_char, dtor: DestroyFn) -> OwnedCString {
         assert!(!ptr.is_null());
-        OwnedCString { ptr: ptr, dtor: dtor }
+        OwnedCString {
+            ptr: ptr,
+            dtor: dtor,
+        }
     }
 }
 
@@ -189,14 +192,15 @@ impl Debug for OwnedCString {
 /// in the source data.
 pub struct NulError {
     position: usize,
-    bytes: Vec<u8>
+    bytes: Vec<u8>,
 }
 
 impl NulError {
-
     /// Returns the position of the first NUL byte in the byte sequence that
     /// was attempted to convert to `CStrBuf`.
-    pub fn nul_position(&self) -> usize { self.position }
+    pub fn nul_position(&self) -> usize {
+        self.position
+    }
 
     /// Consumes this error and returns the bytes that were attempted to make
     /// a C string with.
@@ -206,7 +210,6 @@ impl NulError {
 }
 
 impl Error for NulError {
-
     fn description(&self) -> &str {
         "invalid data for C string: contains a NUL byte"
     }
@@ -214,22 +217,35 @@ impl Error for NulError {
 
 impl fmt::Display for NulError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "invalid data for C string: NUL at position {}", self.position)
+        write!(
+            f,
+            "invalid data for C string: NUL at position {}",
+            self.position
+        )
     }
 }
 
 impl fmt::Debug for NulError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // TODO: truncate output if too long
-        write!(f, "NulError {{ position: {}, bytes: \"{}\" }}",
-               self.position, escape_bytestring(&self.bytes))
+        write!(
+            f,
+            "NulError {{ position: {}, bytes: \"{}\" }}",
+            self.position,
+            escape_bytestring(&self.bytes)
+        )
     }
 }
 
 impl From<NulError> for IoError {
     fn from(err: NulError) -> IoError {
-        IoError::new(InvalidInput,
-            format!("invalid data for C string: NUL at position {}", err.position))
+        IoError::new(
+            InvalidInput,
+            format!(
+                "invalid data for C string: NUL at position {}",
+                err.position
+            ),
+        )
     }
 }
 
@@ -238,7 +254,7 @@ const IN_PLACE_SIZE: usize = 31;
 #[derive(Clone)]
 enum CStrData {
     Owned(Vec<u8>),
-    InPlace([u8; IN_PLACE_SIZE])
+    InPlace([u8; IN_PLACE_SIZE]),
 }
 
 /// An adaptor type to pass C string data to foreign functions.
@@ -251,7 +267,7 @@ enum CStrData {
 /// ways `CStrBuf` values can be constructed.
 #[derive(Clone)]
 pub struct CStrBuf {
-    data: CStrData
+    data: CStrData,
 }
 
 fn find_nul(bytes: &[u8]) -> Option<usize> {
@@ -260,7 +276,9 @@ fn find_nul(bytes: &[u8]) -> Option<usize> {
 
 fn vec_into_c_str(mut v: Vec<u8>) -> CStrBuf {
     v.push(NUL);
-    CStrBuf { data: CStrData::Owned(v) }
+    CStrBuf {
+        data: CStrData::Owned(v),
+    }
 }
 
 fn escape_bytestring(s: &[u8]) -> String {
@@ -298,30 +316,31 @@ macro_rules! c_str {
         // literal out of bytestring or string literals. Otherwise, we could
         // use from_static_bytes and accept byte strings as well.
         // See https://github.com/rust-lang/rfcs/pull/566
-        unsafe {
-            std::ffi::CStr::from_ptr(concat!($lit, "\0").as_ptr()
-                                        as *const $crate::c_char)
-        }
-    }
+        unsafe { std::ffi::CStr::from_ptr(concat!($lit, "\0").as_ptr() as *const $crate::c_char) }
+    };
 }
 
 impl CStrBuf {
-
     /// Create a `CStrBuf` by consuming an iterable source of bytes.
     ///
     /// # Failure
     ///
     /// Returns `Err` if the source contains an interior NUL byte.
     pub fn from_iter<I>(iterable: I) -> Result<CStrBuf, NulError>
-        where I: IntoIterator<Item=u8>
+    where
+        I: IntoIterator<Item = u8>,
     {
         fn nul_error<I>(mut collected: Vec<u8>, remaining: I) -> NulError
-            where I: Iterator<Item=u8>
+        where
+            I: Iterator<Item = u8>,
         {
             let pos = collected.len();
             collected.push(NUL);
             collected.extend(remaining);
-            NulError { position: pos, bytes: collected }
+            NulError {
+                position: pos,
+                bytes: collected,
+            }
         }
 
         let mut iter = iterable.into_iter();
@@ -329,12 +348,11 @@ impl CStrBuf {
             (_, Some(len)) if len < IN_PLACE_SIZE => {
                 // The iterator promises the items will fit into the
                 // in-place variant.
-                let mut buf: [u8; IN_PLACE_SIZE]
-                           = unsafe { mem::uninitialized() };
-                for i in 0 .. len + 1 {
+                let mut buf: [u8; IN_PLACE_SIZE] = unsafe { mem::uninitialized() };
+                for i in 0..len + 1 {
                     match iter.next() {
                         Some(NUL) => {
-                            return Err(nul_error(buf[.. i].to_vec(), iter));
+                            return Err(nul_error(buf[..i].to_vec(), iter));
                         }
                         Some(c) => {
                             buf[i] = c;
@@ -342,8 +360,8 @@ impl CStrBuf {
                         None => {
                             buf[i] = NUL;
                             return Ok(CStrBuf {
-                                    data: CStrData::InPlace(buf)
-                                });
+                                data: CStrData::InPlace(buf),
+                            });
                         }
                     }
                 }
@@ -351,12 +369,10 @@ impl CStrBuf {
                 // Copy the collected buffer into the vector
                 // that the owned collection path will continue with
                 let mut vec = Vec::<u8>::with_capacity(len + 2);
-                vec.extend(buf[.. len + 1].iter().cloned());
+                vec.extend(buf[..len + 1].iter().cloned());
                 vec
             }
-            (lower, _) => {
-                Vec::with_capacity(lower + 1)
-            }
+            (lower, _) => Vec::with_capacity(lower + 1),
         };
         // Loop invariant: vec.len() < vec.capacity()
         loop {
@@ -388,7 +404,9 @@ impl CStrBuf {
                 vec.set_len(len + 1);
             }
         }
-        Ok(CStrBuf { data: CStrData::Owned(vec) })
+        Ok(CStrBuf {
+            data: CStrData::Owned(vec),
+        })
     }
 
     /// Create a `CStrBuf` by copying a string slice.
@@ -410,7 +428,10 @@ impl CStrBuf {
     /// the original vector and `NulError` information is returned.
     pub fn from_vec(vec: Vec<u8>) -> Result<CStrBuf, NulError> {
         if let Some(pos) = find_nul(&vec[..]) {
-            return Err(NulError {position: pos, bytes: vec});
+            return Err(NulError {
+                position: pos,
+                bytes: vec,
+            });
         }
         Ok(vec_into_c_str(vec))
     }
@@ -422,24 +443,23 @@ impl CStrBuf {
 
     /// Converts `self` into a byte vector, potentially saving an allocation.
     pub fn into_vec(mut self) -> Vec<u8> {
-        match mem::replace(&mut self.data,
-                           CStrData::InPlace(unsafe { mem::uninitialized() }))
-        {
+        match mem::replace(
+            &mut self.data,
+            CStrData::InPlace(unsafe { mem::uninitialized() }),
+        ) {
             CStrData::Owned(mut v) => {
                 let len = v.len();
                 v.truncate(len - 1);
                 v
             }
-            CStrData::InPlace(ref a) => {
-                a[.. find_nul(a).unwrap()].to_vec()
-            }
+            CStrData::InPlace(ref a) => a[..find_nul(a).unwrap()].to_vec(),
         }
     }
 
     fn as_bytes(&self) -> &[u8] {
         match self.data {
-            CStrData::Owned(ref v) => &v[.. v.len() - 1],
-            CStrData::InPlace(ref a) => &a[.. find_nul(a).unwrap()]
+            CStrData::Owned(ref v) => &v[..v.len() - 1],
+            CStrData::InPlace(ref a) => &a[..find_nul(a).unwrap()],
         }
     }
 }
@@ -451,13 +471,12 @@ impl fmt::Debug for CStrBuf {
 }
 
 impl Deref for CStrBuf {
-
     type Target = CStr;
 
     fn deref(&self) -> &CStr {
         let p = match self.data {
-            CStrData::Owned(ref v)   => (*v).as_ptr(),
-            CStrData::InPlace(ref a) => a.as_ptr()
+            CStrData::Owned(ref v) => (*v).as_ptr(),
+            CStrData::InPlace(ref a) => a.as_ptr(),
         } as *const c_char;
         unsafe { CStr::from_ptr(p) }
     }
@@ -477,21 +496,26 @@ pub struct CChars<'a> {
 impl<'a> CChars<'a> {
     #[inline]
     pub fn from_c_str(s: &'a CStr) -> CChars<'a> {
-        CChars { ptr: s.as_ptr(), lifetime: marker::PhantomData }
+        CChars {
+            ptr: s.as_ptr(),
+            lifetime: marker::PhantomData,
+        }
     }
 }
 
 impl<'a> Clone for CChars<'a> {
     #[inline]
     fn clone(&self) -> CChars<'a> {
-        CChars { ptr: self.ptr, lifetime: marker::PhantomData }
+        CChars {
+            ptr: self.ptr,
+            lifetime: marker::PhantomData,
+        }
     }
 }
 
-impl<'a> Copy for CChars<'a> { }
+impl<'a> Copy for CChars<'a> {}
 
 impl<'a> Iterator for CChars<'a> {
-
     type Item = c_char;
 
     fn next(&mut self) -> Option<c_char> {
@@ -516,16 +540,15 @@ impl<'a> Iterator for CChars<'a> {
 ///
 /// The specified closure is invoked with each string that
 /// is found, and the number of strings found is returned.
-pub unsafe fn parse_c_multistring<F>(buf: *const c_char,
-                                     limit: Option<usize>,
-                                     mut f: F) -> usize
-    where F: FnMut(&[u8])
+pub unsafe fn parse_c_multistring<F>(buf: *const c_char, limit: Option<usize>, mut f: F) -> usize
+where
+    F: FnMut(&[u8]),
 {
     let mut curr_ptr = buf;
     let mut ctr: usize = 0;
     let (limited_count, limit) = match limit {
         Some(limit) => (true, limit),
-        None => (false, 0)
+        None => (false, 0),
     };
     while (!limited_count || ctr < limit) && *curr_ptr != 0 {
         let bytes = CStr::from_ptr(curr_ptr).to_bytes();
