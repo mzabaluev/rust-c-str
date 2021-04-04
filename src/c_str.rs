@@ -230,7 +230,7 @@ impl fmt::Debug for NulError {
 impl From<NulError> for IoError {
     fn from(err: NulError) -> IoError {
         IoError::new(InvalidInput,
-            format!("invalid data for C string: NUL at position {}", err.position).as_ref())
+            format!("invalid data for C string: NUL at position {}", err.position))
     }
 }
 
