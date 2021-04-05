@@ -85,7 +85,7 @@ use std::io::Error as IoError;
 use std::io::ErrorKind::InvalidInput;
 use std::iter::IntoIterator;
 use std::marker;
-use std::mem::{self, MaybeUninit};
+use std::mem;
 use std::ops::Deref;
 
 pub use libc::c_char;
@@ -348,8 +348,8 @@ impl CStrBuf {
             (_, Some(len)) if len < IN_PLACE_SIZE => {
                 // The iterator promises the items will fit into the
                 // in-place variant.
-                let mut buf: [u8; IN_PLACE_SIZE] = unsafe { mem::uninitialized() };
-                for i in 0..len + 1 {
+                let mut buf = [NUL; IN_PLACE_SIZE];
+                for i in 0..=len {
                     match iter.next() {
                         Some(NUL) => {
                             return Err(nul_error(buf[..i].to_vec(), iter));
@@ -358,7 +358,7 @@ impl CStrBuf {
                             buf[i] = c;
                         }
                         None => {
-                            buf[i] = NUL;
+                            // buf[i] = NUL; // already done by zero-init
                             return Ok(CStrBuf {
                                 data: CStrData::InPlace(buf),
                             });
@@ -369,7 +369,7 @@ impl CStrBuf {
                 // Copy the collected buffer into the vector
                 // that the owned collection path will continue with
                 let mut vec = Vec::<u8>::with_capacity(len + 2);
-                vec.extend(buf[..len + 1].iter().cloned());
+                vec.extend_from_slice(&buf[..=len]);
                 vec
             }
             (lower, _) => Vec::with_capacity(lower + 1),
@@ -443,10 +443,7 @@ impl CStrBuf {
 
     /// Converts `self` into a byte vector, potentially saving an allocation.
     pub fn into_vec(mut self) -> Vec<u8> {
-        match mem::replace(
-            &mut self.data,
-            CStrData::InPlace(unsafe { mem::uninitialized() }),
-        ) {
+        match mem::replace(&mut self.data, CStrData::InPlace([NUL; IN_PLACE_SIZE])) {
             CStrData::Owned(mut v) => {
                 let len = v.len();
                 v.truncate(len - 1);
