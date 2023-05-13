@@ -51,8 +51,8 @@ macro_rules! c_str {
         // use from_static_bytes and accept byte strings as well.
         // See https://github.com/rust-lang/rfcs/pull/566
         unsafe {
-            std::ffi::CStr::from_ptr(concat!($lit, "\0").as_ptr()
-                                     as *const std::os::raw::c_char)
+            core::ffi::CStr::from_ptr(concat!($lit, "\0").as_ptr()
+                                      as *const std::os::raw::c_char)
         }
     }
 }
