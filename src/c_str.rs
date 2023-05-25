@@ -52,7 +52,7 @@ macro_rules! c_str {
         // See https://github.com/rust-lang/rfcs/pull/566
         unsafe {
             core::ffi::CStr::from_ptr(concat!($lit, "\0").as_ptr()
-                                      as *const std::os::raw::c_char)
+                                      as *const core::ffi::c_char)
         }
     }
 }
